@@ -463,6 +463,121 @@ public sealed class RegistrationTests : IDisposable
     }
 
     [Fact]
+    public void Register_CustomValidate_AddsToTheBuiltInChecks()
+    {
+        // The builder's Validate is additive: a caller's own rule can pass while a built-in one
+        // still fails, and the registration must not let a green custom rule mask it.
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("both", b => b.Options(o => o
+            .Validate(_ => true)
+            .Configure(x =>
+            {
+                x.RootPath = _root;
+                x.MaxAge = TimeSpan.Zero; // built-in rule: invalid with the cleanup enabled
+            })));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredKeyedService<ITempFolder>("both"));
+    }
+
+    [Fact]
+    public void Register_TwoInstancesOnTheSameSection_DoNotShareOptions()
+    {
+        // Both registrations bind the same section, so only the per-registration options name
+        // keeps their Configure callbacks apart. Without it the second MaxAge would leak into the
+        // first instance.
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Shared:RootPath"] = _root,
+                ["Shared:MaxAge"] = "1.00:00:00",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddSaTempFolder("one", b => b.FromConfiguration("Shared"));
+        services.AddSaTempFolder("two", b => b
+            .FromConfiguration("Shared")
+            .Options(o => o.Configure(x => x.MaxAge = TimeSpan.FromDays(7))));
+
+        using var provider = services.BuildServiceProvider();
+
+        var one = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("one");
+        var two = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("two");
+
+        Assert.Equal(TimeSpan.FromDays(1), one.OptionsSnapshot.MaxAge);
+        Assert.Equal(TimeSpan.FromDays(7), two.OptionsSnapshot.MaxAge);
+    }
+
+    [Fact]
+    public void Register_FromConfigurationTwice_LastPathWins()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["First:RootPath"] = _root,
+                ["First:FolderPrefix"] = "first_",
+                ["Second:RootPath"] = _root,
+                ["Second:FolderPrefix"] = "second_",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddSaTempFolder("last", b => b
+            .FromConfiguration("First")
+            .FromConfiguration("Second"));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = (Sa.Data.TempFolder.TempFolder)provider.GetRequiredKeyedService<ITempFolder>("last");
+
+        Assert.Equal("second_", folder.OptionsSnapshot.FolderPrefix);
+    }
+
+    [Fact]
+    public void Register_NamingDateFromConfiguration_SelectsTheDateStrategy()
+    {
+        var clock = new ManualTimeProvider(new DateTimeOffset(2030, 6, 15, 14, 30, 0, TimeSpan.Zero));
+
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Dated:RootPath"] = _root,
+                ["Dated:Naming"] = "Date",
+                ["Dated:FolderNameFormat"] = "yyyyMMdd",
+                ["Dated:FolderPrefix"] = "cfg_",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSaTempFolder("dated", b => b.FromConfiguration("Dated"));
+
+        using var provider = services.BuildServiceProvider();
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("dated");
+
+        // The enum came from configuration — the strategy is selected at resolve time from it.
+        Assert.Equal("cfg_20300615", Path.GetRelativePath(_root, folder.CreateSubfolder()));
+    }
+
+    [Fact]
+    public void Register_ResolvingTheSameKeyTwice_ReturnsTheSameInstance()
+    {
+        var services = new ServiceCollection();
+        services.AddSaTempFolder("single", b => b.Options(o => o.Configure(x => x.RootPath = _root)));
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Same(
+            provider.GetRequiredKeyedService<ITempFolder>("single"),
+            provider.GetRequiredKeyedService<ITempFolder>("single"));
+    }
+
+    [Fact]
     public void Register_DefaultNameOverload_ResolvesUnderTheDefaultKey()
     {
         var services = new ServiceCollection();

@@ -29,6 +29,36 @@ internal static class TestTemp
     public static void MakeExpired(string directory, TimeSpan? age = null)
         => Directory.SetLastWriteTimeUtc(directory, DateTime.UtcNow - (age ?? TimeSpan.FromHours(48)));
 
+    /// <summary>
+    /// Creates a directory symlink, or skips the current test where the platform forbids it
+    /// (Windows without developer mode / the create-symlink privilege). The target need not exist:
+    /// a dangling link is a link too, and the guard must still recognise it.
+    /// </summary>
+    public static void CreateDirectoryLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(linkPath, targetPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Assert.Skip($"Directory symlinks are unavailable on this platform: {ex.Message}");
+        }
+    }
+
+    /// <summary>Same as <see cref="CreateDirectoryLink"/>, for a file link.</summary>
+    public static void CreateFileLink(string linkPath, string targetPath)
+    {
+        try
+        {
+            File.CreateSymbolicLink(linkPath, targetPath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            Assert.Skip($"File symlinks are unavailable on this platform: {ex.Message}");
+        }
+    }
+
     /// <summary>The cancellation token of the currently running test.</summary>
     public static CancellationToken Token => TestContext.Current.CancellationToken;
 }

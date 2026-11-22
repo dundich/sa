@@ -17,7 +17,7 @@ public sealed class TouchDebounceTests : IDisposable
 
     public void Dispose() => TestTemp.TryDelete(_root);
 
-    private ServiceProvider Build()
+    private ServiceProvider Build(Action<TempFolderOptions>? options = null)
     {
         var services = new ServiceCollection();
 
@@ -25,7 +25,11 @@ public sealed class TouchDebounceTests : IDisposable
         // leaves the manual clock in place for the debouncer (and everything else).
         services.AddSingleton<TimeProvider>(_clock);
 
-        services.AddSaTempFolder("debounce", b => b.Options(ob => ob.Configure(o => o.RootPath = _root)));
+        services.AddSaTempFolder("debounce", b => b.Options(ob => ob.Configure(o =>
+        {
+            o.RootPath = _root;
+            options?.Invoke(o);
+        })));
         return services.BuildServiceProvider();
     }
 
@@ -202,6 +206,44 @@ public sealed class TouchDebounceTests : IDisposable
 
         Assert.Equal(stale, Directory.GetLastWriteTimeUtc(foo));
         provider.Dispose();
+    }
+
+    [Fact]
+    public async Task ZeroDebounce_TouchesImmediatelyWithoutATimer()
+    {
+        // TouchDebounce = 0 is the "no coalescing, touch now" branch: the walk runs synchronously
+        // under the write's own lease, so no timer is ever armed.
+        using var provider = Build(o => o.TouchDebounce = TimeSpan.Zero);
+        var folder = provider.GetRequiredKeyedService<ITempFolder>("debounce");
+
+        var foo = Path.Combine(_root, "foo");
+        Directory.CreateDirectory(foo);
+        Directory.SetLastWriteTimeUtc(foo, Base.AddHours(-1).UtcDateTime);
+
+        await folder.WriteAsync(
+            new MemoryStream("x"u8.ToArray()), Path.Combine("foo", "f.txt"), TestTemp.Token);
+
+        Assert.Equal(0, _clock.ArmedCount);
+        Assert.Equal(Base.UtcDateTime, Directory.GetLastWriteTimeUtc(foo));
+    }
+
+    [Fact]
+    public void DisposedDebouncer_HasNoPendingWithin()
+    {
+        using var gate = new CleanupGate();
+        var debouncer = new TouchDebouncer(gate, _root, TimeSpan.FromSeconds(5), _clock);
+        var folder = Path.Combine(_root, "foo");
+        Directory.CreateDirectory(folder);
+
+        debouncer.Request(folder);
+        Assert.True(debouncer.HasPendingWithin(folder));
+
+        debouncer.Dispose();
+
+        // Nothing may stay "pending" forever after the instance is gone — a pass that outlives
+        // it must not keep skipping the folder.
+        Assert.False(debouncer.HasPendingWithin(folder));
+        Assert.Equal(0, _clock.ArmedCount);
     }
 
     [Fact]

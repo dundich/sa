@@ -91,6 +91,27 @@ public sealed class CleanupProtectionTests : IDisposable
         Assert.NotNull(next);
     }
 
+    [Fact]
+    public async Task CleanupGate_WaitingActivityTokenCancelled_Throws_AndTheGateStaysUsable()
+    {
+        using var gate = new CleanupGate();
+        using var pass = gate.TryEnterCleanup(TestTemp.Token);
+        Assert.NotNull(pass);
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        // The waiting side gave up: it never enters, but the pass it interrupted is still the
+        // pass that must release the gate — the cancellation token only abandons the wait.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => gate.EnterActivityAsync(cts.Token).AsTask());
+
+        pass!.Dispose();
+
+        using var next = gate.TryEnterCleanup(TestTemp.Token);
+        Assert.NotNull(next);
+    }
+
     // ---------- Save / Copy vs the pass ----------
 
     [Fact]
@@ -407,50 +428,37 @@ public sealed class CleanupProtectionTests : IDisposable
         Assert.False(Directory.Exists(busy));
     }
 
-    /// <summary>
-    /// Blocks the reading side until released — holds the save (and therefore its activity
-    /// lease) at a precise point instead of racing on timing.
-    /// </summary>
-    private sealed class GatedStream(byte[] data, TaskCompletionSource entered, Task release) : Stream
+    [Fact]
+    public async Task Cleanup_CallerCancellationMidPass_Propagates_AndDeletesNothing()
     {
-        private int _position;
+        BlockingStrategy.Entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        BlockingStrategy.Release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => data.Length;
-        public override long Position
+        try
         {
-            get => _position;
-            set => throw new NotSupportedException();
-        }
+            using var provider = Build(configure: b => b.UseCleanupStrategy<BlockingStrategy>());
+            var folder = Resolve(provider);
+            var victim = MakeSubfolder("victim");
+            using var cts = new CancellationTokenSource();
 
-        public override async ValueTask<int> ReadAsync(
-            Memory<byte> buffer, CancellationToken cancellationToken = default)
+            var cleanup = Task.Run(async () => await folder.CleanupExpiredAsync(cts.Token), TestTemp.Token);
+
+            // The pass is inside the selection — the gate is held.
+            await BlockingStrategy.Entered!.Task.WaitAsync(TimeSpan.FromSeconds(10), TestTemp.Token);
+
+            // Cancelled by the caller, not interrupted by activity: the exception must surface.
+            await cts.CancelAsync();
+            BlockingStrategy.Release!.SetResult();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cleanup);
+            Assert.True(Directory.Exists(victim));
+        }
+        finally
         {
-            if (_position == 0 && !entered.Task.IsCompleted)
-            {
-                entered.TrySetResult();
-                await release.WaitAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            var read = Math.Min(buffer.Length, data.Length - _position);
-            data.AsSpan(_position, read).CopyTo(buffer.Span);
-            _position += read;
-            return read;
+            BlockingStrategy.Release?.TrySetResult();
+            BlockingStrategy.Entered = null;
+            BlockingStrategy.Release = null;
         }
-
-        public override int Read(byte[] buffer, int offset, int count)
-            => ReadAsync(buffer.AsMemory(offset, count), CancellationToken.None)
-                .AsTask().GetAwaiter().GetResult();
-
-        public override void Flush()
-        {
-        }
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>

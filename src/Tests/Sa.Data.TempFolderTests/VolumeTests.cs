@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Sa.Data.TempFolder;
 
 namespace Sa.Data.TempFolderTests;
@@ -87,17 +88,16 @@ public sealed class VolumeTests : IDisposable
         var folder = Resolve(provider);
 
         var dir = MakeSizedFolder("big", bytes: 100);
+        var cachedStamp = Directory.GetLastWriteTimeUtc(dir); // what the first scan keys the cache by
 
         await folder.CleanupExpiredAsync(TestTemp.Token);
         lock (events) Assert.Single(events);
 
-        // Drop under the limit: deleting the payload changes the folder's last write time,
-        // so the cache invalidates and the next scan sees the new total.
-        // The delay matters: directory mtime has a tick granularity (ext4 ≈ up to 10 ms), so a
-        // delete landing in the same tick as the cached stamp would leave the cache valid —
-        // harmless in production (scans run minutes apart), fatal for a back-to-back test.
-        await Task.Delay(50, TestTemp.Token);
+        // Drop under the limit. The cache is keyed by the folder's stamp, so the stamp is moved to
+        // a value the cache cannot hold — no sleep, and no dependence on the filesystem's
+        // directory-mtime granularity (a delete landing in the cached tick would leave it valid).
         File.Delete(Path.Combine(dir, "payload.bin"));
+        Directory.SetLastWriteTimeUtc(dir, cachedStamp.AddSeconds(-1));
 
         await folder.CleanupExpiredAsync(TestTemp.Token);
 
@@ -180,6 +180,117 @@ public sealed class VolumeTests : IDisposable
     }
 
     [Fact]
+    public async Task Scan_CancelledToken_ThrowsInsteadOfMeasuring()
+    {
+        using var scanner = new VolumeScanner("volume", _root, NullLogger.Instance);
+        MakeSizedFolder("big", bytes: 100);
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => scanner.ScanAsync(new TempFolderOptions { RootPath = _root }, cts.Token));
+    }
+
+    [Fact]
+    public async Task Cleanup_WithActivityInFlight_SkipsThePreCleanupScan()
+    {
+        var events = new List<TempFolderVolumeArgs>();
+        using var provider = Build(options: o =>
+        {
+            o.TrackVolume = true;
+            o.MaxTotalSize = 10;
+            o.OnVolumeExceeded = e => { lock (events) events.Add(e); };
+        });
+        var folder = Resolve(provider);
+
+        MakeSizedFolder("big", bytes: 100);
+        await folder.WriteAsync(new MemoryStream(), "big/hold.bin", TestTemp.Token);
+
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var token = TestTemp.Token;
+
+        var read = folder.ReadAsync(
+            "big/hold.bin",
+            async (stream, ct) =>
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(ct);
+            },
+            token);
+
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10), token);
+
+        // While activity is in flight the pass cannot start, so the scan is skipped rather than
+        // wasted — and no event is raised off a measurement nobody asked for.
+        Assert.Equal(0, await folder.CleanupExpiredAsync(token));
+        lock (events) Assert.Empty(events);
+
+        release.SetResult();
+        Assert.True(await read);
+
+        // The next pass measures and reports the real total.
+        await folder.CleanupExpiredAsync(token);
+        lock (events) Assert.Single(events);
+    }
+
+    [Fact]
+    public async Task Scan_PrunesTheCacheOfAVanishedFolder()
+    {
+        using var provider = Build(options: o =>
+        {
+            o.TrackVolume = true;
+            o.MaxTotalSize = 1000;
+        });
+        var folder = (Sa.Data.TempFolder.TempFolder)Resolve(provider);
+
+        var dir = MakeSizedFolder("big", bytes: 100);
+        var stamp = Directory.GetLastWriteTimeUtc(dir);
+        Assert.Equal(100, await folder.ScanVolumeAsync(TestTemp.Token));
+
+        // Gone out-of-band: the next scan sees no folder and drops its entry.
+        TestTemp.TryDelete(dir);
+        Assert.Equal(0, await folder.ScanVolumeAsync(TestTemp.Token));
+
+        // Recreated with the *same* stamp but different content — a surviving stale entry would
+        // still match the key and serve 100.
+        Directory.CreateDirectory(dir);
+        await File.WriteAllBytesAsync(Path.Combine(dir, "payload.bin"), new byte[10], TestTemp.Token);
+        Directory.SetLastWriteTimeUtc(dir, stamp);
+
+        Assert.Equal(10, await folder.ScanVolumeAsync(TestTemp.Token));
+    }
+
+    [Fact]
+    public async Task MaxTotalSizeTurnedOff_ResetsTheEdgeState()
+    {
+        var events = new List<TempFolderVolumeArgs>();
+        using var provider = Build(options: o =>
+        {
+            o.TrackVolume = true;
+            o.MaxTotalSize = 10;
+            o.OnVolumeExceeded = e => { lock (events) events.Add(e); };
+        });
+        var folder = (Sa.Data.TempFolder.TempFolder)Resolve(provider);
+        var options = folder.OptionsSnapshot;
+
+        MakeSizedFolder("big", bytes: 100);
+        Assert.Equal(100, await folder.ScanVolumeAsync(TestTemp.Token));
+        lock (events) Assert.Single(events);
+
+        // The limit is turned off: the monitor must forget the state instead of freezing it.
+        options.MaxTotalSize = 0;
+        Assert.Equal(100, await folder.ScanVolumeAsync(TestTemp.Token));
+        lock (events) Assert.Single(events);
+
+        // With the limit back, entering "over" is a fresh edge and is announced again.
+        options.MaxTotalSize = 10;
+        Assert.Equal(100, await folder.ScanVolumeAsync(TestTemp.Token));
+        lock (events) Assert.Equal(2, events.Count);
+    }
+
+    [Fact]
     public async Task TrackVolumeOff_NeverMeasures_NeverFires()
     {
         var events = 0;
@@ -221,19 +332,29 @@ public sealed class VolumeTests : IDisposable
     [Fact]
     public async Task HandlerExceptions_DoNotBreakThePass()
     {
+        var measured = 0L;
+
         using var provider = Build(options: o =>
         {
             o.TrackVolume = true;
             o.MaxTotalSize = 10;
-            o.OnVolumeExceeded = _ => throw new InvalidOperationException("handler boom");
+            o.OnVolumeExceeded = e =>
+            {
+                measured = e.TotalSize;
+                throw new InvalidOperationException("handler boom");
+            };
         });
         var folder = Resolve(provider);
 
-        MakeSizedFolder("big", bytes: 100);
+        var dir = MakeSizedFolder("big", bytes: 100);
 
         var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
-        Assert.Equal(0, removed); // fresh folder kept — the throwing handler did not kill the pass
+        // The scan really ran (the handler saw the measured total) and its exception was contained:
+        // the fresh folder is kept and the pass is not lost.
+        Assert.Equal(100, measured);
+        Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(dir));
     }
 
     [Fact]

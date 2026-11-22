@@ -160,4 +160,70 @@ public sealed class PathGuardTests
         Assert.Throws<SecurityException>(
             () => PathGuard.TopSegment(Root, Path.Combine(Path.GetTempPath(), "elsewhere", "x.txt")));
     }
+
+    [Fact]
+    public void IsSymlink_RecognisesADanglingLink()
+    {
+        var root = TestTemp.NewRoot();
+
+        try
+        {
+            var link = Path.Combine(root, "link");
+            TestTemp.CreateDirectoryLink(link, Path.Combine(root, "missing-target"));
+
+            // Nothing exists at the target, so File/Directory.Exists answer false — but the entry
+            // is a link, and a create/write through it would land wherever the target points.
+            Assert.True(PathGuard.IsSymlink(link));
+            Assert.False(Directory.Exists(link));
+        }
+        finally
+        {
+            TestTemp.TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void IsSymlink_RecognisesAFileLink()
+    {
+        var root = TestTemp.NewRoot();
+
+        try
+        {
+            var target = Path.Combine(root, "target.bin");
+            File.WriteAllText(target, "x");
+            var link = Path.Combine(root, "link.bin");
+            TestTemp.CreateFileLink(link, target);
+
+            Assert.True(PathGuard.IsSymlink(link));
+            Assert.True(PathGuard.IsSymlink(target) is false);
+        }
+        finally
+        {
+            TestTemp.TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public void IsSymlink_MissingPath_IsFalse()
+    {
+        // Nothing to follow: a plain missing entry is not a link, and the operation that follows
+        // will either create it or fail on its own terms.
+        Assert.False(PathGuard.IsSymlink(Path.Combine(TestTemp.NewMissingPath(), "nope")));
+    }
+
+    [Fact]
+    public void AssertNoSymlinkComponents_OutsideRoot_Throws()
+    {
+        Assert.Throws<SecurityException>(
+            () => PathGuard.AssertNoSymlinkComponents(
+                Root, Path.Combine(Path.GetTempPath(), "elsewhere", "x.txt")));
+    }
+
+    [Fact]
+    public void AssertNoSymlinkComponents_RootItself_IsAllowed()
+    {
+        // The root is validated configuration, not probed: a root that happens to be a link (a
+        // mounted symlinked temp dir) must not make every operation fail.
+        PathGuard.AssertNoSymlinkComponents(Root, Root);
+    }
 }

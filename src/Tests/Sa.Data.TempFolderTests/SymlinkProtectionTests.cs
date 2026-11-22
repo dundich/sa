@@ -36,39 +36,10 @@ public sealed class SymlinkProtectionTests : IDisposable
     private ITempFolder Resolve(ServiceProvider provider)
         => provider.GetRequiredKeyedService<ITempFolder>(Key);
 
-    /// <summary>
-    /// Creates a directory symlink, or skips the test where the platform forbids it (Windows
-    /// without developer mode / the create-symlink privilege).
-    /// </summary>
-    private static void CreateDirectoryLink(string linkPath, string targetPath)
-    {
-        try
-        {
-            Directory.CreateSymbolicLink(linkPath, targetPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-        {
-            Assert.Skip($"Directory symlinks are unavailable on this platform: {ex.Message}");
-        }
-    }
-
-    /// <summary>Same as <see cref="CreateDirectoryLink"/>, for a file link.</summary>
-    private static void CreateFileLink(string linkPath, string targetPath)
-    {
-        try
-        {
-            File.CreateSymbolicLink(linkPath, targetPath);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-        {
-            Assert.Skip($"File symlinks are unavailable on this platform: {ex.Message}");
-        }
-    }
-
     [Fact]
     public async Task Write_ThroughASymlinkedDirectory_ThrowsSecurityException()
     {
-        CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
 
         using var provider = Build();
         var folder = Resolve(provider);
@@ -87,7 +58,7 @@ public sealed class SymlinkProtectionTests : IDisposable
     {
         var target = Path.Combine(_outside, "secret.bin");
         await File.WriteAllBytesAsync(target, [9, 9, 9], TestTemp.Token);
-        CreateFileLink(Path.Combine(_root, "payload.bin"), target);
+        TestTemp.CreateFileLink(Path.Combine(_root, "payload.bin"), target);
 
         using var provider = Build();
         var folder = Resolve(provider);
@@ -104,7 +75,7 @@ public sealed class SymlinkProtectionTests : IDisposable
     [Fact]
     public void CreateSubfolder_ThroughASymlinkedDirectory_ThrowsSecurityException()
     {
-        CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
 
         using var provider = Build();
         var folder = Resolve(provider);
@@ -127,7 +98,7 @@ public sealed class SymlinkProtectionTests : IDisposable
         TestTemp.MakeExpired(victim);
 
         var link = Path.Combine(_root, "up_link");
-        CreateDirectoryLink(link, _outside);
+        TestTemp.CreateDirectoryLink(link, _outside);
 
         // A real expired folder in the root proves the pass still did its normal job.
         var real = Path.Combine(_root, "up_real");
@@ -154,15 +125,15 @@ public sealed class SymlinkProtectionTests : IDisposable
         await File.WriteAllBytesAsync(Path.Combine(_outside, "big.bin"), new byte[5000], TestTemp.Token);
 
         // A top-level link to the outside tree…
-        CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
 
         // …a nested link inside a real folder…
         var real = Path.Combine(_root, "up_data");
         Directory.CreateDirectory(real);
-        CreateDirectoryLink(Path.Combine(real, "link"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(real, "link"), _outside);
 
         // …and a link cycle (a link back to its own ancestor): none may be walked.
-        CreateDirectoryLink(Path.Combine(real, "loop"), real);
+        TestTemp.CreateDirectoryLink(Path.Combine(real, "loop"), real);
 
         var events = new List<TempFolderVolumeArgs>();
         using var provider = Build(o =>
@@ -193,7 +164,7 @@ public sealed class SymlinkProtectionTests : IDisposable
         // component check File.Delete would unlink the target's file, outside the root.
         var target = Path.Combine(_outside, "keep.bin");
         await File.WriteAllBytesAsync(target, [7, 7, 7], TestTemp.Token);
-        CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
 
         using var provider = Build();
         var folder = Resolve(provider);
@@ -208,7 +179,7 @@ public sealed class SymlinkProtectionTests : IDisposable
     public async Task Read_ThroughASymlinkedDirectory_Throws()
     {
         await File.WriteAllBytesAsync(Path.Combine(_outside, "secret.bin"), [1, 2, 3], TestTemp.Token);
-        CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_cache"), _outside);
 
         using var provider = Build();
         var folder = Resolve(provider);
@@ -234,7 +205,7 @@ public sealed class SymlinkProtectionTests : IDisposable
         // The link's tree is not this instance's: a recursive walk must neither report its files
         // (paths outside the root) nor spin on a link cycle.
         await File.WriteAllBytesAsync(Path.Combine(_outside, "outside.txt"), [1], TestTemp.Token);
-        CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
 
         var real = Path.Combine(_root, "up_data");
         Directory.CreateDirectory(real);
@@ -252,5 +223,101 @@ public sealed class SymlinkProtectionTests : IDisposable
 
         var single = Assert.Single(found);
         Assert.Equal(Path.Combine(real, "inside.txt"), single);
+    }
+
+    [Fact]
+    public async Task Enumerate_LinkedSubfolder_IsRejected()
+    {
+        // The link is the *search root* here, not an entry below it: a reparse-point filter on
+        // the entries cannot help, and following it would report files that live outside the root
+        // (under textually-inside paths that ReadAsync then refuses).
+        await File.WriteAllBytesAsync(Path.Combine(_outside, "outside.txt"), [1], TestTemp.Token);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        await Assert.ThrowsAsync<SecurityException>(async () =>
+        {
+            await foreach (var _ in folder.EnumerateFilesAsync(
+                "*.txt", "up_link", cancellationToken: TestTemp.Token))
+            {
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Enumerate_LinkedSubfolderRecursive_IsRejected()
+    {
+        await File.WriteAllBytesAsync(Path.Combine(_outside, "outside.txt"), [1], TestTemp.Token);
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_link"), _outside);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        await Assert.ThrowsAsync<SecurityException>(async () =>
+        {
+            await foreach (var _ in folder.EnumerateFilesAsync(
+                "*.txt", "up_link", recursive: true, TestTemp.Token))
+            {
+            }
+        });
+    }
+
+    [Fact]
+    public async Task Enumerate_DanglingLinkedSubfolder_IsRejected()
+    {
+        // The target does not exist, so the folder is not "there" for a filesystem probe — but it
+        // is still a link, and silently yielding nothing would hide the escape instead of refusing
+        // it. The guard must run before the existence check.
+        var missing = Path.Combine(_outside, "gone");
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_dangling"), missing);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        await Assert.ThrowsAsync<SecurityException>(async () =>
+        {
+            await foreach (var _ in folder.EnumerateFilesAsync(
+                "*.txt", "up_dangling", cancellationToken: TestTemp.Token))
+            {
+            }
+        });
+    }
+
+    [Fact]
+    public void CreateSubfolder_ThroughADanglingLink_ThrowsAndCreatesNothing()
+    {
+        // The link has no target yet: a "create the parents as needed" implementation would build
+        // the whole tree outside the root on the way to the target.
+        var target = Path.Combine(_outside, "not-there");
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_cache"), target);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        Assert.Throws<SecurityException>(
+            () => folder.CreateSubfolder(Path.Combine("up_cache", "inner")));
+
+        Assert.False(Directory.Exists(target));
+        Assert.False(Directory.Exists(Path.Combine(target, "inner")));
+    }
+
+    [Fact]
+    public async Task Write_ThroughADanglingLink_ThrowsAndCreatesNothing()
+    {
+        var target = Path.Combine(_outside, "not-there");
+        TestTemp.CreateDirectoryLink(Path.Combine(_root, "up_cache"), target);
+
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        using var payload = new MemoryStream([1, 2, 3]);
+
+        await Assert.ThrowsAsync<SecurityException>(
+            async () => await folder.WriteAsync(
+                payload, Path.Combine("up_cache", "payload.bin"), TestTemp.Token));
+
+        Assert.False(Directory.Exists(target));
     }
 }

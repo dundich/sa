@@ -116,21 +116,19 @@ public sealed class CleanupTests : IDisposable
 
         // Portable caveat: on platforms where .NET maps Directory.GetCreationTimeUtc onto the
         // write time (some Linux setups without a usable statx birth time), the two age sources
-        // are physically indistinguishable on that machine — then only "the pass completed"
-        // is assertable. Where a real creation time exists, the forged write time is ignored.
-        var platformDistinguishes = Directory.GetCreationTimeUtc(dir) != Directory.GetLastWriteTimeUtc(dir);
+        // are physically indistinguishable on that machine — then the case cannot be tested at all.
+        if (Directory.GetCreationTimeUtc(dir) == Directory.GetLastWriteTimeUtc(dir))
+        {
+            Assert.Skip(
+                "This platform maps creation time onto the write time; AgeSource=CreationTime cannot be distinguished.");
+        }
 
         var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
-        if (platformDistinguishes)
-        {
-            Assert.Equal(0, removed);
-            Assert.True(Directory.Exists(dir));
-        }
-        else
-        {
-            Assert.True(removed is 0 or 1); // the pass ran to completion
-        }
+        // A real creation time exists, so the forged write time is ignored: the folder is not
+        // expired and survives the pass.
+        Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(dir));
     }
 
     [Fact]
@@ -178,6 +176,26 @@ public sealed class CleanupTests : IDisposable
         var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
 
         Assert.Equal(0, removed);
+        Assert.True(Directory.Exists(expired));
+    }
+
+    [Fact]
+    public async Task Cleanup_PreCancelledCallerToken_ThrowsBeforeDeleting()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        var expired = MakeSubfolder("expired");
+        TestTemp.MakeExpired(expired);
+
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        // A pass cancelled by its own caller propagates (unlike an activity interrupt, which
+        // returns the partial count): the caller must know its cleanup did not run.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => folder.CleanupExpiredAsync(cts.Token).AsTask());
+
         Assert.True(Directory.Exists(expired));
     }
 
@@ -423,6 +441,78 @@ public sealed class CleanupTests : IDisposable
         Assert.False(Directory.Exists(differentlyCased));
     }
 
+    [Fact]
+    public async Task Cleanup_StrategyThrows_PassIsSkippedWithoutCrash()
+    {
+        // A buggy strategy must cost one pass, not the process: the failure is logged and the
+        // pass reports 0 — nothing is deleted, nothing propagates.
+        using var provider = Build(configure: b => b.UseCleanupStrategy<ThrowingStrategy>());
+        var folder = Resolve(provider);
+
+        var expired = MakeSubfolder("expired");
+        TestTemp.MakeExpired(expired);
+
+        Assert.Equal(0, await folder.CleanupExpiredAsync(TestTemp.Token));
+        Assert.True(Directory.Exists(expired));
+    }
+
+    [Fact]
+    public async Task Cleanup_StrategyThrowsOperationCanceled_EndsThePassQuietly()
+    {
+        // Current contract: an OperationCanceledException out of the selection is treated like an
+        // interrupt of the pass (the instance cannot tell a strategy's own cancellation from the
+        // one an arriving write raises) — 0, nothing deleted, no crash. A caller cancellation is
+        // different and does propagate: see Cleanup_PreCancelledCallerToken_ThrowsBeforeDeleting.
+        using var provider = Build(configure: b => b.UseCleanupStrategy<CancellingStrategy>());
+        var folder = Resolve(provider);
+
+        var expired = MakeSubfolder("expired");
+        TestTemp.MakeExpired(expired);
+
+        Assert.Equal(0, await folder.CleanupExpiredAsync(TestTemp.Token));
+        Assert.True(Directory.Exists(expired));
+    }
+
+    [Fact]
+    public async Task Cleanup_DescentStopsAtMaxSearchDepth()
+    {
+        using var provider = Build();
+        var folder = Resolve(provider);
+
+        // Top-level folder is depth 0. A folder at depth MaxSearchDepth is still reached (its
+        // parent at depth-1 descends into it), one level deeper is not.
+        var reachable = MakeFreshChain("reachable", AgeBasedCleanupStrategy.MaxSearchDepth - 1);
+        var selected = Path.Combine(reachable, "expired");
+        Directory.CreateDirectory(selected);
+        TestTemp.MakeExpired(selected);
+
+        var unreachable = MakeFreshChain("unreachable", AgeBasedCleanupStrategy.MaxSearchDepth);
+        var skipped = Path.Combine(unreachable, "expired");
+        Directory.CreateDirectory(skipped);
+        TestTemp.MakeExpired(skipped);
+
+        var removed = await folder.CleanupExpiredAsync(TestTemp.Token);
+
+        Assert.Equal(1, removed);
+        Assert.False(Directory.Exists(selected));  // at the cap — inspected and taken
+        Assert.True(Directory.Exists(skipped));    // beyond the cap — never inspected
+        Assert.True(Directory.Exists(unreachable));
+    }
+
+    /// <summary>Creates <c>root/top</c> plus <paramref name="extraLevels"/> fresh nested folders and returns the deepest.</summary>
+    private string MakeFreshChain(string top, int extraLevels)
+    {
+        var path = MakeSubfolder(top);
+
+        for (var i = 0; i < extraLevels; i++)
+        {
+            path = Path.Combine(path, $"d{i}");
+            Directory.CreateDirectory(path);
+        }
+
+        return path;
+    }
+
     /// <summary>Code-override sample: no age filter at all — everything top-level goes.</summary>
     private sealed class DeleteEverythingStrategy : ICleanupStrategy
     {
@@ -449,5 +539,19 @@ public sealed class CleanupTests : IDisposable
     {
         public IReadOnlyList<string> SelectForDeletion(CleanupContext context)
             => [Path.Combine(context.RootPath, "never_existed")];
+    }
+
+    /// <summary>A buggy strategy: selection itself blows up.</summary>
+    private sealed class ThrowingStrategy : ICleanupStrategy
+    {
+        public IReadOnlyList<string> SelectForDeletion(CleanupContext context)
+            => throw new InvalidOperationException("strategy boom");
+    }
+
+    /// <summary>A strategy that honours the pass token by throwing from selection.</summary>
+    private sealed class CancellingStrategy : ICleanupStrategy
+    {
+        public IReadOnlyList<string> SelectForDeletion(CleanupContext context)
+            => throw new OperationCanceledException(context.Options.RootPath);
     }
 }

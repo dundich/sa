@@ -347,83 +347,115 @@ public class FilePathResolverTests
         Assert.Throws<ArgumentException>(() => new FilePathResolver(new FakeFileSystem(), "   "));
     }
 
+    [Fact]
+    public void FilesystemRoot_IsAValidConfiguredPath_AndRelativisesDirectHits()
+    {
+        // A root that is itself the filesystem root ("/" or "C:\") must survive normalisation —
+        // trimming its separator would leave "" (or a drive-relative "C:") and the constructor
+        // would report a perfectly valid root as missing.
+        var root = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()))!;
+        var file = Path.Combine(root, "sa_fpr_root.mp3");
+        var resolver = new FilePathResolver(new FakeFileSystem(file), root);
+
+        Assert.Equal(root, resolver.ConfiguredPath);
+
+        // ...and a direct child still relativises: appending a second separator would build "//"
+        // and never match.
+        Assert.Equal("sa_fpr_root.mp3", resolver.ResolvePath(file, asRelativePath: true));
+    }
+
+    [Fact]
+    public void WithMap_RaisesResolvedImmediately_AndAThrowingHandlerIsSwallowed()
+    {
+        var resolver = new FilePathResolver(new FakeFileSystem(), FakeRoot);
+        var fired = 0;
+        resolver.Resolved += (_, _) =>
+        {
+            fired++;
+            throw new InvalidOperationException("handler boom");
+        };
+
+        // An explicit map is a mapping: the event fires before any lookup, and a subscriber that
+        // throws cannot break the configuration call that succeeded.
+        resolver.WithMap("/archive");
+        Assert.Equal(1, fired);
+
+        resolver.WithMap("/archive2"); // still exactly once
+        Assert.Equal(1, fired);
+        Assert.True(resolver.IsResolved);
+    }
+
+    [Fact]
+    public void WithPossibleExtensions_NarrowsDeepSearch()
+    {
+        using var scope = new TempRoot();
+        scope.Touch(Path.Combine("a", "note.wav"));
+        scope.Touch(Path.Combine("b", "note.txt"));
+
+        var filtered = FilePathResolver.Create(scope.Root)
+            .WithDeepSearch(true)
+            .WithPossibleExtensions(".wav");
+
+        // Both files share the stem, so the name pattern matches both — the configured list is
+        // what narrows the hit to the allowed extension.
+        Assert.Equal(Path.Combine(scope.Root, "a", "note.wav"), filtered.ResolvePath("note.mp3"));
+    }
+
+    [Fact]
+    public void WithPossibleExtensions_NormalisesInput()
+    {
+        var resolver = new FilePathResolver(new FakeFileSystem(), FakeRoot)
+            .WithPossibleExtensions("mp3", ".mp3", "  ", "wav", ".MP3");
+
+        // A leading dot is added, blanks dropped, duplicates removed — and the set stays
+        // case-sensitive, so "MP3" and "mp3" remain distinct entries.
+        Assert.Equal([".mp3", ".wav", ".MP3"], resolver.PossibleExtensions);
+    }
+
+    [Fact]
+    public void WithMap_NullOrWhitespace_Throws()
+    {
+        var resolver = new FilePathResolver(new FakeFileSystem(), FakeRoot);
+
+        Assert.ThrowsAny<ArgumentException>(() => resolver.WithMap(null!));
+        Assert.ThrowsAny<ArgumentException>(() => resolver.WithMap("   "));
+    }
+
+    [Fact]
+    public void ResolvePath_AsRelativePath_DirectHitInsideRoot_IsRelativised()
+    {
+        using var scope = new TempRoot();
+        scope.Touch(Path.Combine("2021", "x.mp3"));
+        var absolute = Path.Combine(scope.Root, "2021", "x.mp3");
+        var resolver = FilePathResolver.Create(scope.Root);
+
+        Assert.Equal(Path.Combine("2021", "x.mp3"), resolver.ResolvePath(absolute, asRelativePath: true));
+    }
+
+    [Fact]
+    public void ResolvePath_ManyDistinctPaths_KeepResolving()
+    {
+        // More hits than the bounded cache holds (65 536): on overflow it is dropped wholesale,
+        // so an early mapping is re-resolved instead of being lost for the rest of the process.
+        const int count = 65_537;
+        var files = new string[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            files[i] = $"/db/{i}/f.mp3";
+        }
+
+        var resolver = new FilePathResolver(new FakeFileSystem(files), FakeRoot);
+
+        foreach (var file in files)
+        {
+            Assert.Equal(file, resolver.ResolvePath(file));
+        }
+
+        Assert.Equal(files[0], resolver.ResolvePath(files[0]));
+    }
+
     /// <summary>Converts a '/'-separated path literal to the platform's separators.</summary>
     private static string Platform(string path)
         => path.Replace('/', Path.DirectorySeparatorChar);
-
-    /// <summary>
-    /// In-memory <see cref="IFileSystemService"/> over a fixed set of file paths.
-    /// Probes are counted so tests can assert cache behaviour.
-    /// </summary>
-    private sealed class FakeFileSystem(params string[] files) : IFileSystemService
-    {
-        private readonly HashSet<string> _files = [.. files.Select(Key)];
-
-        /// <summary>Number of <see cref="FileExists"/> probes.</summary>
-        public int Probes;
-
-        /// <summary>Number of <see cref="EnumerateFiles"/> calls.</summary>
-        public int Enumerations;
-
-        public bool FileExists(string path)
-        {
-            Interlocked.Increment(ref Probes);
-            return _files.Contains(Key(path));
-        }
-
-        public bool DirectoryExists(string path) => true;
-
-        public IEnumerable<string> EnumerateFiles(string directory, string pattern)
-        {
-            Interlocked.Increment(ref Enumerations);
-
-            var prefix = Key(directory) + "/";
-            return _files
-                .Where(f => f.StartsWith(prefix, StringComparison.Ordinal) && MatchName(Path.GetFileName(f), pattern))
-                .Select(f => f.Replace('/', Path.DirectorySeparatorChar))
-                .ToList();
-        }
-
-        private static bool MatchName(string name, string pattern)
-            => pattern.Contains('*')
-                ? name.StartsWith(pattern[..pattern.IndexOf('*')], StringComparison.Ordinal)
-                : name == pattern;
-
-        private static string Key(string path)
-            => path.Replace('\\', '/').TrimEnd('/');
-    }
-
-    /// <summary>A throw-away directory under the system temp path, removed on dispose.</summary>
-    private sealed class TempRoot : IDisposable
-    {
-        public TempRoot()
-        {
-            Root = Path.Combine(Path.GetTempPath(), "sa_fpr_" + Path.GetRandomFileName());
-            Directory.CreateDirectory(Root);
-        }
-
-        public string Root { get; }
-
-        public void Touch(string relativePath)
-        {
-            var full = Path.Combine(Root, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-            File.WriteAllText(full, "x");
-        }
-
-        public void Dispose()
-        {
-            try
-            {
-                Directory.Delete(Root, recursive: true);
-            }
-            catch (IOException)
-            {
-                // best-effort cleanup
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
-    }
 }
