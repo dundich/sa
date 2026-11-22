@@ -67,6 +67,7 @@ internal sealed class FileSystemStorage(
         Stream fileStream,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(fileStream);
         EnsureWritable();
 
@@ -107,7 +108,7 @@ internal sealed class FileSystemStorage(
         ArgumentNullException.ThrowIfNull(fileId);
         ArgumentNullException.ThrowIfNull(loadStream);
 
-        if (!CanProcess(fileId))
+        if (!CanProcess(fileId) || !NamesAFile(fileId))
             return Task.FromResult(false);
 
         // The temp folder already reads a missing file as `false` and rejects a directory path;
@@ -120,7 +121,7 @@ internal sealed class FileSystemStorage(
         ArgumentNullException.ThrowIfNull(fileId);
         EnsureWritable();
 
-        if (!CanProcess(fileId))
+        if (!CanProcess(fileId) || !NamesAFile(fileId))
             return false;
 
         try
@@ -152,6 +153,24 @@ internal sealed class FileSystemStorage(
 
         return span[(separatorIndex + SchemeSeparator.Length)..].ToString();
     }
+
+    /// <summary>
+    /// Whether <paramref name="fileId"/> names an actual file of this storage's layout — a tenant
+    /// and a non-empty file name after the basket.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CanProcess"/> answers <i>ownership</i>: an ID truncated to the basket
+    /// (<c>fs://share</c>) or to a tenant directory (<c>fs://share/1</c>) resolves inside the scope
+    /// and is therefore this storage's. It names no file, though, and the temp folder rejects a
+    /// directory path with <see cref="InvalidOperationException"/> — while "there is no file" is the
+    /// contract here. The same parser the metadata path uses decides, so download, delete and
+    /// metadata agree on what a file ID is.
+    /// </remarks>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool NamesAFile(string fileId)
+        => FileIdParser.TryParse(
+            fileId, FileIdFormat.WithoutTimestamp,
+            out _, out _, out _, out _);
 
     /// <summary>
     /// Determines whether <paramref name="fileId"/> resolves to a file inside this storage's basket.
