@@ -119,6 +119,14 @@ public sealed record PostgresFileStorageOptions
                 $"MaxUploadSizeBytes must not be negative (0 means no limit), but was {MaxUploadSizeBytes}.",
                 nameof(MaxUploadSizeBytes));
         }
+
+        if (!Enum.IsDefined(PartByRange))
+        {
+            // The value is mapped to a PgPartBy at registration; an undefined one would either throw
+            // from there with no property name or produce a DDL the retention schedule cannot match.
+            throw new ArgumentException(
+                $"Unknown PartByRange value: {PartByRange}.", nameof(PartByRange));
+        }
     }
 
     /// <summary>

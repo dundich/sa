@@ -113,44 +113,73 @@ internal sealed class PostgresFileStorage(
         Stream fileStream,
         CancellationToken cancellationToken)
     {
-        // The argument check runs before the read-only guard: a caller that passed no stream should
+        // The argument checks run before the read-only guard: a caller that passed no stream should
         // learn about the bad argument, not about the storage's mode.
+        ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(fileStream);
         EnsureWritable();
 
         metadata.Validate();
 
+        // One normalised name for everything below: the column, the extension and the file ID. The
+        // ID has always been built from a normalised name while the row kept the raw one, so a name
+        // with a leading separator produced metadata that could not be rebuilt into its own ID — and
+        // a name of separators alone produced an ID this storage could not parse back.
+        string fileName = FileIdParser.NormalizeFileName(metadata.FileName);
+
+        if (fileName.Length == 0)
+        {
+            throw new ArgumentException(
+                "FileName must contain at least one character other than a path separator.",
+                nameof(metadata));
+        }
+
         // The column widths are part of this provider's contract, so an over-long name is rejected
         // here with a named argument error instead of surfacing as a bare PostgreSQL 22001 on the
         // insert. Length counts UTF-16 units, i.e. never fewer than the characters varchar() counts.
-        if (metadata.FileName.Length > PostgresFileStorageTable.NameMaxLength)
+        if (fileName.Length > PostgresFileStorageTable.NameMaxLength)
         {
             throw new ArgumentException(
                 $"FileName exceeds the maximum length of {PostgresFileStorageTable.NameMaxLength} " +
-                $"characters, but was {metadata.FileName.Length}.",
+                $"characters, but was {fileName.Length}.",
                 nameof(metadata));
         }
 
         // PostgreSQL text cannot hold a NUL byte, and the name reaches both the `name` column and the
         // file ID, so a NUL is rejected here instead of failing the insert with a bare 22021.
-        if (metadata.FileName.Contains('\0'))
+        if (fileName.Contains('\0'))
         {
             throw new ArgumentException(
                 "FileName must not contain a NUL character.", nameof(metadata));
         }
 
-        // A seekable stream knows its size up front, so an oversized upload is rejected before any
-        // partition DDL runs. A non-seekable one is measured while it is buffered (see below).
-        long maxBytes = options.MaxUploadSizeBytes;
+        string fileExtension = FileIdParser.GetFileExtension(fileName);
 
-        if (maxBytes > 0 && fileStream.CanSeek && fileStream.Length > maxBytes)
+        // Checked before any partition DDL runs: a rejected upload must not leave a table behind.
+        if (fileExtension.Length > PostgresFileStorageTable.FileExtMaxLength)
         {
-            ThrowUploadTooLarge(fileStream.Length, maxBytes);
+            throw new ArgumentException(
+                $"The file extension exceeds the maximum length of " +
+                $"{PostgresFileStorageTable.FileExtMaxLength} characters, but was {fileExtension.Length}.",
+                nameof(metadata));
         }
 
-        DateTimeOffset createdAtDay = _timeProvider.GetUtcNow().Date;
-        long createdAt = createdAtDay.ToUnixTimeSeconds();
+        // A seekable stream knows its size up front, so an oversized upload is rejected before any
+        // partition DDL runs. A non-seekable one is measured while it is buffered (see below). The
+        // remainder is what gets stored: the caller's current position is respected, exactly like the
+        // filesystem provider does it.
+        long maxBytes = options.MaxUploadSizeBytes;
+        long uploadSize = fileStream.CanSeek
+            ? Math.Max(0, fileStream.Length - fileStream.Position)
+            : 0;
 
+        if (maxBytes > 0 && fileStream.CanSeek && uploadSize > maxBytes)
+        {
+            ThrowUploadTooLarge(uploadSize, maxBytes);
+        }
+
+        DateTimeOffset createdAtDay = StartOfUtcDay(_timeProvider.GetUtcNow());
+        long createdAt = createdAtDay.ToUnixTimeSeconds();
 
         await partManager.EnsurePartsAsync(
             _qualifiedTableName,
@@ -159,17 +188,7 @@ internal sealed class PostgresFileStorage(
             cancellationToken).ConfigureAwait(false);
 
         string fileId = FileIdParser.FormatToFileId(
-            StorageType, _partName, metadata.TenantId, createdAtDay, metadata.FileName);
-
-        string fileExtension = FileIdParser.GetFileExtension(metadata.FileName);
-
-        if (fileExtension.Length > PostgresFileStorageTable.FileExtMaxLength)
-        {
-            throw new ArgumentException(
-                $"The file extension exceeds the maximum length of " +
-                $"{PostgresFileStorageTable.FileExtMaxLength} characters, but was {fileExtension.Length}.",
-                nameof(metadata));
-        }
+            StorageType, _partName, metadata.TenantId, createdAtDay, fileName);
 
         // If stream isn't seekable, copy into a pooled PooledMemoryStream first. Npgsql writes a
         // Stream parameter from its *current* position, so the buffer has to be rewound before it
@@ -188,22 +207,19 @@ internal sealed class PostgresFileStorage(
 
                 await CopyToBufferAsync(fileStream, ms, maxBytes, cancellationToken).ConfigureAwait(false);
                 ms.Position = 0;
-            }
-            else
-            {
-                ms.Position = 0;
+                uploadSize = ms.Length;
             }
 
             await dataSource.ExecuteNonQueryAsync(_insertSql,
             [
                   new NpgsqlParameter<string>("id", fileId)
-                , new NpgsqlParameter<string>("name", metadata.FileName)
+                , new NpgsqlParameter<string>("name", fileName)
                 , new NpgsqlParameter<string>("file_ext", fileExtension)
                 , new NpgsqlParameter<Stream>("data", ms)
                 // 64-bit end to end: the column is BIGINT and the parameter is long, so the recorded
                 // size can never be silently truncated. (PostgreSQL caps a single bytea at 1 GB,
                 // well below int.MaxValue, but the type must still match the declared column.)
-                , new NpgsqlParameter<long>("size", ms.Length)
+                , new NpgsqlParameter<long>("size", uploadSize)
                 , new NpgsqlParameter<int>("tenant_id", metadata.TenantId)
                 , new NpgsqlParameter<string>("basket", _partName)
                 , new NpgsqlParameter<long>("created_at", createdAt)
@@ -426,4 +442,23 @@ internal sealed class PostgresFileStorage(
         => throw new InvalidOperationException(
             $"The upload is at least {size} bytes, which exceeds the configured " +
             $"{nameof(PostgresFileStorageOptions.MaxUploadSizeBytes)} ({maxBytes}).");
+
+    /// <summary>
+    /// The UTC midnight of <paramref name="instant"/>'s day — the stamp every row carries in
+    /// <c>created_at</c> and every File ID embeds.
+    /// </summary>
+    /// <remarks>
+    /// Built from the UTC calendar parts with an explicit zero offset. Reading
+    /// <see cref="DateTimeOffset.Date"/> instead looks equivalent but returns a
+    /// <see cref="DateTime"/> with <see cref="DateTimeKind.Unspecified"/>: converting that back to
+    /// a <see cref="DateTimeOffset"/> re-applies the <i>machine's</i> offset, so east of UTC the
+    /// stamp became 21:00 of the previous day (UTC+3) and the partitional layer — which normalises
+    /// with <c>ToUniversalTime().StartOfDay()</c> — put the row in the previous day's partition.
+    /// </remarks>
+    internal static DateTimeOffset StartOfUtcDay(DateTimeOffset instant)
+    {
+        DateTime utc = instant.UtcDateTime;
+
+        return new DateTimeOffset(utc.Year, utc.Month, utc.Day, 0, 0, 0, TimeSpan.Zero);
+    }
 }
