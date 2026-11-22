@@ -32,7 +32,7 @@ public interface IDeliveryGroupOptionsProvider
     /// defaults first, then the section addressed by <paramref name="configurationKey"/> (when one
     /// is given).
     /// </summary>
-    /// <param name="consumerGroupId">The (sanitized) consumer group id.</param>
+    /// <param name="consumerGroupId">The (validated) consumer group id.</param>
     /// <param name="configurationKey">
     /// The configuration section path for this group. When null or empty no section is bound, but
     /// provider-wide defaults may still be applied.

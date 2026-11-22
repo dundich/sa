@@ -67,7 +67,7 @@ The whole pipeline is three layers:
 | `FilterFactory.cs` | Builds an `OutboxMessageFilter` from settings |
 | `OutboxDeliveryMessage.cs` | A rented row: message payload plus delivery info |
 | `OutboxTaskDeliveryInfo.cs` | Task-level delivery info (`TaskId`, `DeliveryId`, `Attempt`, `LastErrorId`, `Status`) |
-| `IConsumerGroupNamingStrategy.cs` | Consumer-group name sanitisation strategy |
+| `IConsumerGroupNamingStrategy.cs` | Consumer-group naming strategy (default: `cg_{hash}` of the consumer type) |
 | `Setup.cs` | `AddOutboxDelivery` — DI wiring for everything above |
 
 ## The delivery pipeline

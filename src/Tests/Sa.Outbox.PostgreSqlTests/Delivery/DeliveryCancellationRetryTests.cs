@@ -48,7 +48,7 @@ public class DeliveryCancellationRetryTests(DeliveryCancellationRetryTests.Fixtu
                 .WithMetadata((_, metadata) => metadata.AddMetadata<TestMessage>("root_1", m => m.PayloadId))
                 .WithTenants((_, tenants) => tenants.WithTenantIds(TenantId))
                 .WithDeliveries(deliveries => deliveries
-                    .AddDeliveryScoped<CancelOnceConsumer, TestMessage>("cancel-retry", (_, settings) =>
+                    .AddDeliveryScoped<CancelOnceConsumer, TestMessage>("cancel_retry", (_, settings) =>
                     {
                         settings
                             .WithMaxBatchSize(1)

@@ -114,6 +114,12 @@ single-provider applications.
 | `Paused` | false | Pause flag |
 | `IdleMaxInterval` | 0 (disabled) | Upper bound of the adaptive empty-queue poll back-off; must be `>= Interval` when set |
 
+**`ConsumerGroupId` is an identity, not a label.** `AddDelivery` / `AddDeliveryScoped` use it verbatim
+as the consumer's DI key, the settings key, the job name and part of the PostgreSQL partition name.
+Only lowercase ASCII letters, digits and underscores are accepted; `es-group`, `ES_GROUP` and the
+like throw `ArgumentException` instead of being silently rewritten to `es_group`, so two
+registrations can never collapse into one group.
+
 ## Empty-Queue Wait Policy
 
 Empty-queue back-off is opt-in per consumer group. Set the base `Interval` (used while work flows) and the cap `IdleMaxInterval` (used while empty):

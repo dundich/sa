@@ -105,9 +105,9 @@ public sealed class DeliveryConsumerGroupManagerTests(DeliveryConsumerGroupManag
         public static readonly TimeSpan TestLockRenewal = TimeSpan.FromMilliseconds(10);
 
         public OutboxConsumerSettings SettingsForTestGroup = default!;
-        /// <summary>Реальное (санитизированное) имя группы для CountingMessageConsumer.</summary>
+        /// <summary>Реальное имя группы для CountingMessageConsumer.</summary>
         public string CountingGroupId => SettingsForTestGroup.ConsumerGroupId;
-        /// <summary>Реальное (санитизированное) имя группы для BlockingMessageConsumer.</summary>
+        /// <summary>Реальное имя группы для BlockingMessageConsumer.</summary>
         public static string BlockingGroupId => "mgr_blocking";
         public IOutboxConsumerManager ConsumerManager => GetInitializedManager();
 

@@ -3,11 +3,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Sa.Extensions;
 using Sa.Outbox.Delivery.Job;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.RegularExpressions;
 
 namespace Sa.Outbox.Delivery;
 
-internal sealed partial class DeliveryBuilder(IServiceCollection services, string scopeKey) : IDeliveryBuilder
+internal sealed class DeliveryBuilder(IServiceCollection services, string scopeKey) : IDeliveryBuilder
 {
 
     private IConsumerGroupNamingStrategy _defaultNamingStrategy = new DefaultConsumerGroupNamingStrategy();
@@ -20,9 +19,8 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services, strin
         string? configurationKey = null)
             where TConsumer : class, IConsumer<TMessage>
     {
-        ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
-        var sanitized = SanitizeString(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, false, configure, jobId, scopeKey, configurationKey);
+        EnsureValidConsumerGroupId(consumerGroupId);
+        services.AddDeliveryJob<TConsumer, TMessage>(consumerGroupId, false, configure, jobId, scopeKey, configurationKey);
         return this;
     }
 
@@ -41,9 +39,8 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services, strin
         string? configurationKey = null)
             where TConsumer : class, IConsumer<TMessage>
     {
-        ArgumentNullException.ThrowIfNullOrEmpty(consumerGroupId);
-        var sanitized = SanitizeString(consumerGroupId);
-        services.AddDeliveryJob<TConsumer, TMessage>(sanitized, true, configure, jobId, scopeKey, configurationKey);
+        EnsureValidConsumerGroupId(consumerGroupId);
+        services.AddDeliveryJob<TConsumer, TMessage>(consumerGroupId, true, configure, jobId, scopeKey, configurationKey);
         return this;
     }
 
@@ -79,12 +76,31 @@ internal sealed partial class DeliveryBuilder(IServiceCollection services, strin
             => $"cg_{(typeof(TConsumer).FullName ?? typeof(TConsumer).Name).GetMurmurHash3()}";
     }
 
-    static string SanitizeString(string input)
+    /// <summary>
+    /// Rejects a consumer group id that is not already a canonical key instead of silently rewriting
+    /// it. The id is an identity used verbatim as the consumer's DI key, the settings-registry key,
+    /// the job name and part of the PostgreSQL partition name; sanitising it (<c>es-group</c> and
+    /// <c>es_group</c> both became <c>es_group</c>, <c>ES_GROUP</c> became <c>es_group</c>) made two
+    /// distinct registrations collapse into one, so the caller now gets a loud error.
+    /// </summary>
+    /// <param name="consumerGroupId">The id supplied to <c>AddDelivery</c>.</param>
+    /// <exception cref="ArgumentException">The id is blank or contains a character outside
+    /// <c>[a-z0-9_]</c>.</exception>
+    internal static void EnsureValidConsumerGroupId(string? consumerGroupId)
     {
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(input);
-        return SanitizeRegex().Replace(input, "_").ToLowerInvariant();
-    }
+        ArgumentException.ThrowIfNullOrWhiteSpace(consumerGroupId);
 
-    [GeneratedRegex(@"[^a-zA-Z0-9_]")]
-    private static partial Regex SanitizeRegex();
+        foreach (char c in consumerGroupId)
+        {
+            if (c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_')
+                continue;
+
+            throw new ArgumentException(
+                $"Consumer group id '{consumerGroupId}' is invalid: the character '{c}' is not " +
+                "allowed. A group id is used verbatim as the consumer's DI key, the settings key, " +
+                "the job name and part of the PostgreSQL partition name, so it must contain only " +
+                "lowercase ASCII letters, digits and underscores (for example 'es_group').",
+                nameof(consumerGroupId));
+        }
+    }
 }

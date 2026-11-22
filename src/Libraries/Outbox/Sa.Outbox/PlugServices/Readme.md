@@ -368,7 +368,7 @@ services
         "audit",
         pg => pg.WithDataSource(ds => ds.Options(o => o.Configure(x => x.ConnectionString = auditCs))),
         outbox => outbox
-            .WithDeliveries(d => d.AddDelivery<AuditConsumer, AuditEvent>("audit-events")));
+            .WithDeliveries(d => d.AddDelivery<AuditConsumer, AuditEvent>("audit_events")));
 ```
 
 Publishing:

@@ -67,7 +67,7 @@
 | `FilterFactory.cs` | Собирает `OutboxMessageFilter` из настроек |
 | `OutboxDeliveryMessage.cs` | Арендованная строка: полезная нагрузка плюс информация о доставке |
 | `OutboxTaskDeliveryInfo.cs` | Информация о доставке на уровне задачи (`TaskId`, `DeliveryId`, `Attempt`, `LastErrorId`, `Status`) |
-| `IConsumerGroupNamingStrategy.cs` | Стратегия санитизации имени группы потребителей |
+| `IConsumerGroupNamingStrategy.cs` | Стратегия именования группы потребителей (по умолчанию `cg_{hash}` от типа потребителя) |
 | `Setup.cs` | `AddOutboxDelivery` — DI-развёртывание всего перечисленного |
 
 ## Конвейер доставки

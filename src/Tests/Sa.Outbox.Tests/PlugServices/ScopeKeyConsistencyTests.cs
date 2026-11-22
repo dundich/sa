@@ -165,10 +165,8 @@ public class ScopeKeyConsistencyTests
         var services = new ServiceCollection();
         services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
         AddProvider(services, "a");
-        // Group ids are sanitized by AddDelivery ("-" becomes "_"), which is the identity the
-        // message must report.
-        AddGroups(services, "a", "good-group");
-        AddGroups(services, "orphan-scope", "orphan-group", "second-orphan");
+        AddGroups(services, "a", "good_group");
+        AddGroups(services, "orphan-scope", "orphan_group", "second_orphan");
 
         using ServiceProvider sp = services.BuildServiceProvider();
 
@@ -189,7 +187,7 @@ public class ScopeKeyConsistencyTests
         AddProvider(services, "billing");
         AddProvider(services, "audit");
         AddGroups(services, "billing", "invoices");
-        AddGroups(services, "audit", "audit-events");
+        AddGroups(services, "audit", "audit_events");
 
         using ServiceProvider sp = services.BuildServiceProvider();
 

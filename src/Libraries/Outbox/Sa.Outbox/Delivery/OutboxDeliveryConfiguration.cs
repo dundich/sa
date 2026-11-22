@@ -44,7 +44,7 @@ public sealed class OutboxDeliveryConfiguration
     /// Resolves the section path for a consumer group, or <see langword="null"/> when the convention
     /// is disabled.
     /// </summary>
-    /// <param name="consumerGroupId">The (already sanitized) consumer group id.</param>
+    /// <param name="consumerGroupId">The (already validated) consumer group id.</param>
     /// <returns><c>{SectionPrefix}:{consumerGroupId}</c>, or <see langword="null"/>.</returns>
     public string? ResolveSection(string consumerGroupId)
     {

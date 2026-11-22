@@ -13,7 +13,11 @@ public partial interface IDeliveryBuilder
     /// </summary>
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
-    /// <param name="consumerGroupId">Group identity for consuming.</param>
+    /// <param name="consumerGroupId">
+    /// Group identity for consuming. It is used verbatim (never rewritten), so it must contain only
+    /// lowercase ASCII letters, digits and underscores; a value such as <c>es-group</c> is rejected
+    /// rather than silently collapsed into <c>es_group</c>.
+    /// </param>
     /// <param name="configure">An optional action to configure the delivery settings via builder.</param>
     /// <param name="jobId">An optional job identifier to bind this delivery to a specific scheduled job.</param>
     /// <param name="configurationKey">
@@ -24,6 +28,8 @@ public partial interface IDeliveryBuilder
     /// The <paramref name="configure"/> callback still has the final word.
     /// </param>
     /// <returns>The delivery builder instance.</returns>
+    /// <exception cref="ArgumentException"><paramref name="consumerGroupId"/> is blank or contains a
+    /// character outside <c>[a-z0-9_]</c>.</exception>
     IDeliveryBuilder AddDeliveryScoped<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,
@@ -57,7 +63,11 @@ public partial interface IDeliveryBuilder
     /// </summary>
     /// <typeparam name="TConsumer">The type of consumer.</typeparam>
     /// <typeparam name="TMessage">The type of message.</typeparam>
-    /// <param name="consumerGroupId">Group identity for consuming.</param>
+    /// <param name="consumerGroupId">
+    /// Group identity for consuming. It is used verbatim (never rewritten), so it must contain only
+    /// lowercase ASCII letters, digits and underscores; a value such as <c>es-group</c> is rejected
+    /// rather than silently collapsed into <c>es_group</c>.
+    /// </param>
     /// <param name="configure">An optional action to configure the delivery settings via builder.</param>
     /// <param name="jobId">An optional job identifier to bind this delivery to a specific scheduled job.</param>
     /// <param name="configurationKey">
@@ -68,6 +78,8 @@ public partial interface IDeliveryBuilder
     /// The <paramref name="configure"/> callback still has the final word.
     /// </param>
     /// <returns>The delivery builder instance.</returns>
+    /// <exception cref="ArgumentException"><paramref name="consumerGroupId"/> is blank or contains a
+    /// character outside <c>[a-z0-9_]</c>.</exception>
     IDeliveryBuilder AddDelivery<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TConsumer, TMessage>(
         string consumerGroupId,
         Action<IServiceProvider, OutboxConsumerSettingsBuilder>? configure = null,

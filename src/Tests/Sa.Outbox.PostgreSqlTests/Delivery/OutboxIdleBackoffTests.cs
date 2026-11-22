@@ -39,7 +39,7 @@ public sealed class OutboxIdleBackoffTests(OutboxIdleBackoffTests.Fixture fixtur
         internal const string GroupName = "idle_backoff";
         internal const int TenantId = 7;
 
-        /// <summary>The settings as built by <c>AddDeliveryJob</c> (sanitized group id included).</summary>
+        /// <summary>The settings as built by <c>AddDeliveryJob</c> (the validated group id included).</summary>
         internal OutboxConsumerSettings ConsumerSettings { get; private set; } = default!;
 
         public Fixture() : base()

@@ -17,7 +17,7 @@ public class OutboxRedisEndToEndFixture : OutboxRedisFixture
         Services.AddSaOutbox(builder => builder
             .WithTenants((_, tenants) => tenants.WithTenantIds(1))
             .WithDeliveries(deliveries => deliveries
-                .AddDeliveryScoped<SomeMessageConsumer, TestMessage>("e2e-group", (_, group) => group
+                .AddDeliveryScoped<SomeMessageConsumer, TestMessage>("e2e_group", (_, group) => group
                     // The default InitialDelay is well beyond a test's wait budget.
                     .StartImmediately()
                     .WithInterval(TimeSpan.FromMilliseconds(100))
