@@ -341,6 +341,14 @@ internal sealed partial class TempFolder : ITempFolder
             ? RootPath
             : PathGuard.Resolve(RootPath, subfolder);
 
+        // The *search root* itself must not be a link either: attributes skipped below filter the
+        // entries a walk yields, never the directory it starts in. Following a linked subfolder
+        // would report files that live outside the root under textually-inside paths — the same
+        // containment escape CreateSubfolder/WriteAsync/ReadAsync/DeleteFileAsync already refuse.
+        // Checked before the existence probe: a dangling link reads as "not there", and silently
+        // yielding nothing would hide the escape instead of rejecting it.
+        PathGuard.AssertNoSymlinkComponents(RootPath, directory);
+
         if (!Directory.Exists(directory))
         {
             yield break;
