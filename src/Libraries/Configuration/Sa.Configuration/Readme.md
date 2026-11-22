@@ -265,7 +265,7 @@ builder.Configuration.AddSaConfigurationValueTransform(rules => rules
         context.IsCoreFallback ? value : value is null ? null : $"{value}s"));
 ```
 
-`ValueTransformContext.ClientId` is `null` for the root configuration and the client id for a client overlay. `IsCoreFallback` is `true` when a client overlay is looking at a value derived from the core; the simple overload skips such values, while the context overload receives them and decides. Transforms apply to overlays built from provider rows; a source attached with `AttachAsync` is used as-is.
+`ValueTransformContext.ClientId` is `null` for the root configuration and the client id for a client overlay. `IsCoreFallback` is `true` when an earlier transform derived the value in the overlay from the core (an alias); the simple overload skips such values, while the context overload receives them and decides. A key that merely falls back to the core is never passed to a rule, because it is not among the overlay's own values. Transforms apply to overlays built from provider rows; a source attached with `AttachAsync` is used as-is.
 
 To add a key, expand one key into several, or keep state between loads, use `AddSaConfigurationTransform` — with a lambda returning pairs or with a class implementing `ISaConfigurationTransform`. Transforms run after placeholders and aliases, in registration order.
 
@@ -634,7 +634,7 @@ builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("lega
 **Rules.** `AddSaConfigurationValueTransform` takes a callback that registers `key → map` rules; the key is matched in the canonical `:` spelling, so `sa__pg__host` and `sa:pg:host` are one rule, and registering the same key twice keeps the last rule.
 
 - a rule runs only for a key present in the layer, so it never adds a key; in a client overlay the simple overload runs for the client's own rows — a core-owned key is left to the core pass;
-- the context overload also receives values that came from the core fallback, with `ValueTransformContext.IsCoreFallback` set; `ClientId` is `null` for the root and the client id for an overlay;
+- the context overload also receives values an earlier transform derived from the core fallback (an alias), with `ValueTransformContext.IsCoreFallback` set; a key that only falls back to the core is not offered to either overload; `ClientId` is `null` for the root and the client id for an overlay;
 - returning the received value is not a change: the key is not written to the pass and keeps reading its source;
 - returning `null` blanks the key — `null` in the core, `string.Empty` for a client's own key, the same rule a class transform's `null` follows;
 - the rules of one registration are applied as one step: they do not see each other's output, but they do see earlier transforms' output.
@@ -643,7 +643,7 @@ builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("lega
 
 **Order.** Transforms run after the built-in ones (placeholders, then aliases) in registration order, each seeing the previous step's output. This does not depend on where `AddSaConfigurationTransform` sits relative to `AddSaConfiguration`, because the built-in steps are rebuilt for every load. `Reload()` recomputes the whole chain.
 
-**Client overlays.** The same chain runs over every overlay built from provider rows, with the client's own rows first and the core as a fallback. An alias derived from a core value is a core fallback, not an overlay value: it is not written into the overlay and the simple per-key overload does not rewrite it. A key the client does not own therefore keeps following the core instead of freezing a copy of it; the context overload receives it only when it asks for core fallbacks explicitly. A source attached with `AttachAsync` is not run through the chain.
+**Client overlays.** The same chain runs over every overlay built from provider rows, with the client's own rows first and the core as a fallback. An alias derived from a core value is a core fallback, not an overlay value: it is not written into the overlay and the simple per-key overload does not rewrite it. A key the client does not own therefore keeps following the core instead of freezing a copy of it; the context overload sees the value only when an earlier transform derived it from the core (an alias), and a key that merely falls back to the core is not passed to a rule at all. A source attached with `AttachAsync` is not run through the chain.
 
 ### Clients: full rules
 

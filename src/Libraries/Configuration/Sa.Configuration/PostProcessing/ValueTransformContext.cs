@@ -6,8 +6,9 @@ namespace Sa.Configuration.PostProcessing;
 /// </summary>
 /// <remarks>
 /// <see cref="ClientId"/> is <see langword="null"/> for the root configuration and carries the
-/// client id for a client overlay. <see cref="IsCoreFallback"/> is <see langword="true"/> when the
-/// value came from the core configuration rather than from the layer's own rows; the simple
+/// client id for a client overlay. <see cref="IsCoreFallback"/> is <see langword="true"/> when an
+/// earlier transform derived the value from the core configuration rather than from the layer's own
+/// rows (a key that merely falls back to the core is not offered to any rule); the simple
 /// <see cref="SaConfigurationValueTransformBuilder.Add(string, System.Func{string?, string?})"/>
 /// overload skips such values, while the context overload receives them and can decide.
 /// </remarks>

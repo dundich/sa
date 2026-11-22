@@ -22,8 +22,8 @@ public sealed class SaConfigurationValueTransformBuilder
     /// Registering the same key twice keeps the last rule — the key is compared in the canonical
     /// <c>:</c> spelling, so <c>sa__pg__host</c> and <c>sa:pg:host</c> are the same rule. The rule
     /// runs only when the key exists; returning the received value blanks nothing and copies nothing.
-    /// A value that came from the core fallback of a client overlay is skipped: the core pass has
-    /// already transformed it. Use the context overload to handle such values explicitly.
+    /// A value an earlier transform derived from the core fallback of a client overlay is skipped:
+    /// the core pass has already transformed it. Use the context overload to handle such values.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
@@ -45,10 +45,12 @@ public sealed class SaConfigurationValueTransformBuilder
     /// Adds a rule that also receives the key and the layer it runs over.
     /// </summary>
     /// <remarks>
-    /// This overload receives values that came from the core fallback of a client overlay, with
+    /// This overload also receives the values an earlier transform derived from the core fallback of
+    /// a client overlay (for example an alias), with
     /// <see cref="ValueTransformContext.IsCoreFallback"/> set. The rule can return the value
-    /// unchanged to leave it to the core, or produce an explicit client value. For the root
-    /// configuration <see cref="ValueTransformContext.ClientId"/> is <see langword="null"/>.
+    /// unchanged to leave it to the core, or produce an explicit client value; a key that only falls
+    /// back to the core is never passed to a rule, because it is not in the layer's values. For the
+    /// root configuration <see cref="ValueTransformContext.ClientId"/> is <see langword="null"/>.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="key"/> is blank.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="map"/> is null.</exception>
