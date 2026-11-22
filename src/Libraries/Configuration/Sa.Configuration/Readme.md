@@ -17,6 +17,7 @@ On top of that, the package reloads only the dynamic layer and parses command-li
 - [How the configuration is built](#how-the-configuration-is-built)
 - [Secrets](#secrets)
 - [Key aliases](#key-aliases)
+- [Transforms and targeted corrections](#transforms-and-targeted-corrections)
 - [Clients: core and overlays](#clients-core-and-overlays)
 - [Dynamic layer reload](#dynamic-layer-reload)
 - [Command-line arguments](#command-line-arguments)
@@ -240,7 +241,25 @@ Default behaviour:
 | The nested path wins | `CanonicalValueWins = true` |
 | No value | the path is untouched, the lower-priority source answers |
 
-Registration order, `FinalizeSaConfiguration()`, custom transforms and edge cases — in [Aliases: full rules](#aliases-full-rules).
+Registration order, `FinalizeSaConfiguration()` and edge cases — in [Aliases: full rules](#aliases-full-rules).
+
+## Transforms and targeted corrections
+
+The pass already rewrites two things by itself: `{{secret}}` placeholders and key aliases. Anything else is a **transform** — a step that receives the assembled configuration and returns the keys it wants to change. Most needs are a per-key correction of a value:
+
+```csharp
+using Sa.Configuration;
+
+builder.Configuration.AddSaConfigurationValueTransform(rules => rules
+    .Add("s3_url",  value => value?.Trim())                        // "  https://s3  " → "https://s3"
+    .Add("timeout", value => value is null ? null : $"{value}s")); // "30" → "30s"
+```
+
+A rule runs only for a key that exists and only reports an actual change, so nothing is copied or shadowed: an untouched key keeps reading its source, and a client overlay keeps reading the core.
+
+To add a key, expand one key into several, or keep state between loads, use `AddSaConfigurationTransform` — with a lambda returning pairs or with a class implementing `ISaConfigurationTransform`. Transforms run after placeholders and aliases, in registration order, and apply to client overlays too.
+
+Ordering, the three forms and client behaviour — in [Transforms: full rules](#transforms-full-rules).
 
 ## Clients: core and overlays
 
@@ -545,46 +564,6 @@ builder.Configuration
     .FinalizeSaConfiguration();          // the pass moves to the end
 ```
 
-**Custom transforms.** `AddSaConfigurationTransform` adds a step that receives the assembled configuration and returns **only** the keys it changes. Transforms run after the built-in ones (placeholders, then aliases) in registration order, and each sees the previous results:
-
-```csharp
-public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransform
-{
-    public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
-        => configuration.Values
-            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal))
-            .Select(c => new KeyValuePair<string, string?>(c.Key[prefix.Length..], c.Value));
-}
-
-builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
-```
-
-**Shorthand transforms.** Two overloads cover the common cases without a class of their own.
-
-*Per-key rules* — each registered rule maps the current value of one key to its new value:
-
-```csharp
-builder.Configuration.AddSaConfigurationValueTransform(rules => rules
-    .Add("s3_url",  value => value?.Trim())                        // "  https://s3  " → "https://s3"
-    .Add("timeout", value => value is null ? null : $"{value}s")); // "30" → "30s"
-```
-
-A rule runs only for a key that exists — inside a client overlay that is the client's value, or the core value it falls back to — so it never adds a key. Returning the value it received is not a change: an untouched key is not copied into the pass, and a client overlay keeps reading the core live. Returning `null` blanks the key.
-
-*A lambda that returns pairs* — use it to add a key or to expand one key into several:
-
-```csharp
-builder.Configuration.AddSaConfigurationTransform(view =>
-    view.TryGetValue("key1", out string? raw) && raw is not null
-        ? raw.Split(',', StringSplitOptions.TrimEntries)
-             .Select((item, index) => new KeyValuePair<string, string?>($"key1:{index}", item))
-        : []);
-
-// key1 = "s1,s2,s3" → key1:0 = s1, key1:1 = s2, key1:2 = s3
-```
-
-Both forms are ordinary transforms: they run after the built-in ones in registration order and apply to client overlays too.
-
 **Where the value is looked up.** The alias applies to the assembled configuration built from **all** sources, so the flat key and the canonical path may live in different places: `auth_base_url` in PostgreSQL, `sa:scope:api:auth:base_url` in `appsettings.json`. The alias joins them.
 
 **Who overrides whom.**
@@ -612,6 +591,48 @@ builder.Configuration.AddSaConfiguration(new SecretOptions
 - an empty key or empty string in the mapping is a startup error (such an alias could never match);
 - an empty mapping changes nothing;
 - `Reload()` recomputes the pass: a key that disappeared from a source or from the mapping stops being served.
+
+### Transforms: full rules
+
+**Three forms.** The same step can be a per-key correction, a lambda returning pairs, or a class:
+
+```csharp
+// 1. Per-key rules: one value in, one value out.
+builder.Configuration.AddSaConfigurationValueTransform(rules => rules
+    .Add("s3_url",  value => value?.Trim())
+    .Add("timeout", value => value is null ? null : $"{value}s"));
+
+// 2. Lambda returning pairs: add a key or expand one key into several.
+builder.Configuration.AddSaConfigurationTransform(view =>
+    view.TryGetValue("key1", out string? raw) && raw is not null
+        ? raw.Split(',', StringSplitOptions.TrimEntries)
+             .Select((item, index) => new KeyValuePair<string, string?>($"key1:{index}", item))
+        : []);
+
+// 3. Class: anything stateful.
+public sealed class StripPrefixTransform(string prefix) : ISaConfigurationTransform
+{
+    public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
+        => configuration.Values
+            .Where(c => c.Key.StartsWith(prefix, StringComparison.Ordinal))
+            .Select(c => new KeyValuePair<string, string?>(c.Key[prefix.Length..], c.Value));
+}
+
+builder.Configuration.AddSaConfigurationTransform(new StripPrefixTransform("legacy:"));
+```
+
+**Rules.** `AddSaConfigurationValueTransform` takes a callback that registers `key → map` rules; registering the same key twice keeps the last rule.
+
+- a rule runs only when its key exists, so it never adds a key;
+- returning the received value is not a change: the key is not written to the pass and keeps reading its source;
+- returning `null` blanks the key — `null` in the core, `string.Empty` for a client's own key, the same rule a class transform's `null` follows;
+- the rules of one registration are applied as one step: they do not see each other's output, but they do see earlier transforms' output.
+
+**Only changed keys.** A transform must return **only** the keys it changes. Returning a copy of the whole configuration would shadow every other provider, including the built-in transforms and any source registered after the pass.
+
+**Order.** Transforms run after the built-in ones (placeholders, then aliases) in registration order, each seeing the previous step's output. This does not depend on where `AddSaConfigurationTransform` sits relative to `AddSaConfiguration`, because the built-in steps are rebuilt for every load. `Reload()` recomputes the whole chain.
+
+**Client overlays.** The same chain runs over every client overlay, with the client's own rows first and the core as a fallback. A step that returns the value it received is skipped, so a key the client does not own keeps following the core instead of freezing a copy of it.
 
 ### Clients: full rules
 
