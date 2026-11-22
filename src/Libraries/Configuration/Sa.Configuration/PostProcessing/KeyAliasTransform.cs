@@ -12,8 +12,14 @@ namespace Sa.Configuration.PostProcessing;
 /// transforms (or two <c>AddSaConfiguration</c> calls) with different mappings compose instead
 /// of overwriting each other. Mappings are compared case-insensitively and with <c>__</c>
 /// normalized to <c>:</c>, exactly like configuration keys.
+/// <para>
+/// In a client overlay an alias derived from a core value is reported as a core fallback: the core
+/// pass has already built that canonical path, so the value must not be frozen into the client
+/// overlay or fed to a per-key rule a second time. An alias derived from the client's own row stays
+/// owned by the client.
+/// </para>
 /// </remarks>
-public sealed class KeyAliasTransform : ISaConfigurationTransform
+public sealed class KeyAliasTransform : ISaConfigurationTransform, IOriginTransform
 {
     private readonly IReadOnlyDictionary<string, string> _aliases;
     private readonly bool _canonicalValueWins;
@@ -50,6 +56,15 @@ public sealed class KeyAliasTransform : ISaConfigurationTransform
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
+        return Resolve(configuration)
+            .Select(static change => new KeyValuePair<string, string?>(change.Key, change.Value));
+    }
+
+    /// <inheritdoc/>
+    IEnumerable<TransformChange> IOriginTransform.ApplyWithOrigin(ISaConfigurationView configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
         return Resolve(configuration);
     }
 
@@ -70,27 +85,49 @@ public sealed class KeyAliasTransform : ISaConfigurationTransform
         return result;
     }
 
-    private IEnumerable<KeyValuePair<string, string?>> Resolve(ISaConfigurationView configuration)
+    private IEnumerable<TransformChange> Resolve(ISaConfigurationView configuration)
     {
         foreach (KeyValuePair<string, string> mapping in _aliases)
         {
             string canonicalKey = mapping.Key;
             string aliasKey = mapping.Value;
 
-            if (!configuration.TryGetValue(aliasKey, out string? aliasValue)
+            if (!TryGetValue(configuration, aliasKey, out string? aliasValue, out bool fromCore)
                 || string.IsNullOrWhiteSpace(aliasValue))
             {
                 continue;
             }
 
             if (_canonicalValueWins
-                && configuration.TryGetValue(canonicalKey, out string? canonicalValue)
+                && TryGetValue(configuration, canonicalKey, out string? canonicalValue, out _)
                 && !string.IsNullOrWhiteSpace(canonicalValue))
             {
                 continue;
             }
 
-            yield return new(canonicalKey, aliasValue);
+            // A value derived from the core must not overwrite a key the client owns: the client's
+            // own value is the more specific one.
+            if (fromCore
+                && configuration is ITransformContextView contextView
+                && contextView.IsOwned(canonicalKey))
+            {
+                continue;
+            }
+
+            yield return new TransformChange(canonicalKey, aliasValue, fromCore);
         }
+    }
+
+    private static bool TryGetValue(
+        ISaConfigurationView configuration,
+        string key,
+        out string? value,
+        out bool fromCore)
+    {
+        if (configuration is ITransformContextView contextView)
+            return contextView.TryGetValueWithOrigin(key, out value, out fromCore);
+
+        fromCore = false;
+        return configuration.TryGetValue(key, out value);
     }
 }

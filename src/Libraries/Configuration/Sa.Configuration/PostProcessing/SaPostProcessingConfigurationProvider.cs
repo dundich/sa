@@ -158,11 +158,12 @@ internal sealed class SaPostProcessingConfigurationProvider(
         foreach (ISaConfigurationTransform transform in _state.BuildTransforms())
         {
             // Snapshot: writing to the view is how the next transform sees this one's output.
-            foreach (KeyValuePair<string, string?> change in transform.Apply(view).ToArray())
+            foreach (TransformChange change in TransformChanges.Apply(transform, view).ToArray())
             {
                 string key = ConfigurationKey.Normalize(change.Key);
                 output[key] = change.Value;
                 view.Set(key, change.Value);
+                view.SetOrigin(key, change.IsCoreFallback);
             }
         }
 

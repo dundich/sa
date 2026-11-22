@@ -1,6 +1,14 @@
 namespace Sa.Configuration.PostProcessing;
 
 /// <summary>
+/// One registered rule: the mapping function and whether it opted in to values that came from the
+/// core fallback of a client overlay.
+/// </summary>
+internal readonly record struct ValueRule(
+    Func<ValueTransformContext, string?, string?> Map,
+    bool HandlesCoreFallback);
+
+/// <summary>
 /// The per-key form of a transform: each rule maps the current value of one key to its new value.
 /// </summary>
 /// <remarks>
@@ -10,22 +18,32 @@ namespace Sa.Configuration.PostProcessing;
 /// into the pass data — the core pass keeps reading the source, and a client overlay keeps reading
 /// the core.
 /// <para>
-/// Only the pairs the layer owns are considered. In the core pass that is every key, but a client
-/// overlay exposes only the client's own rows: a key the client does not own has already been
-/// transformed by the core pass, so its rule is not run a second time over that output.
+/// In a client overlay a key can be present because an earlier transform read it from the core
+/// fallback. That value has already been transformed by the core pass, so the simple overload skips
+/// it and the context overload receives <see cref="ValueTransformContext.IsCoreFallback"/> set to
+/// <see langword="true"/> and decides for itself.
 /// </para>
 /// </remarks>
-internal sealed class ValueTransform(IReadOnlyDictionary<string, Func<string?, string?>> rules)
+internal sealed class ValueTransform(IReadOnlyDictionary<string, ValueRule> rules)
     : ISaConfigurationTransform
 {
     public IEnumerable<KeyValuePair<string, string?>> Apply(ISaConfigurationView configuration)
     {
+        ITransformContextView? contextView = configuration as ITransformContextView;
+        string? clientId = contextView?.ClientId;
+
         foreach (KeyValuePair<string, string?> pair in configuration.Values)
         {
-            if (!rules.TryGetValue(pair.Key, out Func<string?, string?>? map))
+            if (!rules.TryGetValue(pair.Key, out ValueRule rule))
                 continue;
 
-            string? changed = map(pair.Value);
+            bool coreFallback = contextView?.IsCoreFallback(pair.Key) ?? false;
+
+            if (coreFallback && !rule.HandlesCoreFallback)
+                continue;
+
+            ValueTransformContext context = new(pair.Key, clientId, coreFallback);
+            string? changed = rule.Map(context, pair.Value);
 
             // Unchanged values stay out of the pass data: in the core they would shadow the source
             // with a copy, and in a client overlay they would freeze a copy of the core value.

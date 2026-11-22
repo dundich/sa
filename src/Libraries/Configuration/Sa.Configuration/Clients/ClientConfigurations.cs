@@ -113,7 +113,7 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
             known = _rows.TryGetValue(client, out Dictionary<string, string?>? values);
 
             if (known)
-                _entries.GetOrAdd(client, _ => CreateRowEntry(values!, ActiveTransforms()));
+                _entries.GetOrAdd(client, _ => CreateRowEntry(client, values!, ActiveTransforms()));
         }
 
         if (!known && _options.ThrowForUnknownClient)
@@ -321,7 +321,7 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
         lock (_loadersGate)
         {
             if (_rows.TryGetValue(client, out Dictionary<string, string?>? values))
-                return _entries.GetOrAdd(client, _ => CreateRowEntry(values, ActiveTransforms())).Root;
+                return _entries.GetOrAdd(client, _ => CreateRowEntry(client, values, ActiveTransforms())).Root;
         }
 
         return null;
@@ -422,7 +422,7 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
 
             if (rows.TryGetValue(pair.Key, out Dictionary<string, string?>? values))
             {
-                provider.Replace(BuildData(values, transforms));
+                provider.Replace(BuildData(values, transforms, pair.Key));
                 entry.Root.Reload();
                 continue;
             }
@@ -437,7 +437,7 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
         foreach (string client in rows.Keys)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            _entries.GetOrAdd(client, _ => CreateRowEntry(rows[client], transforms));
+            _entries.GetOrAdd(client, _ => CreateRowEntry(client, rows[client], transforms));
         }
     }
 
@@ -454,7 +454,8 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
     /// </remarks>
     private Dictionary<string, string?> BuildData(
         IReadOnlyDictionary<string, string?> rows,
-        IReadOnlyList<ISaConfigurationTransform>? transforms)
+        IReadOnlyList<ISaConfigurationTransform>? transforms,
+        string clientId)
     {
         Dictionary<string, string?> data = new(rows, StringComparer.OrdinalIgnoreCase);
 
@@ -463,31 +464,71 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
 
         ClientTransformView view = new(
             new Dictionary<string, string?>(rows, StringComparer.OrdinalIgnoreCase),
-            _core);
+            _core,
+            clientId);
+
+        // Values derived for keys the client does not own are kept aside until the whole chain has
+        // run. An earlier transform can produce an intermediate value which a later transform
+        // replaces with the core value; writing it straight into `data` would leave the intermediate
+        // frozen in the overlay when the final value is then skipped as "same as core".
+        Dictionary<string, string?> derived = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (ISaConfigurationTransform transform in transforms)
         {
             // Snapshot: writing to the view is how the next transform sees this one's output.
-            foreach (KeyValuePair<string, string?> change in transform.Apply(view).ToArray())
+            foreach (TransformChange change in TransformChanges.Apply(transform, view).ToArray())
             {
                 string key = ConfigurationKey.Normalize(change.Key);
-                view.Set(key, change.Value);
-
                 bool own = rows.ContainsKey(key);
 
-                if (change.Value is null)
+                if (change.IsCoreFallback)
                 {
-                    // An unresolved placeholder must not leak as a literal, and it must not fall
-                    // through to the core value either: the client's blank stays the client's.
-                    if (own)
-                        data[key] = string.Empty;
+                    // A core-derived value belongs to the core pass: do not freeze it into the
+                    // overlay and do not let it override the client's own value. It stays visible
+                    // to later transforms (with IsCoreFallback set), so a context rule can opt in;
+                    // the simple per-key overload skips it.
+                    derived.Remove(key);
+
+                    if (!own)
+                    {
+                        data.Remove(key);
+                        view.Set(key, change.Value);
+                        view.SetOrigin(key, true);
+                    }
 
                     continue;
                 }
 
-                if (own || !string.Equals(_core[key], change.Value, StringComparison.Ordinal))
-                    data[key] = change.Value;
+                view.Set(key, change.Value);
+                view.SetOrigin(key, false);
+
+                if (own)
+                {
+                    // An unresolved placeholder must not leak as a literal, and it must not fall
+                    // through to the core value either: the client's blank stays the client's.
+                    data[key] = change.Value ?? string.Empty;
+                    continue;
+                }
+
+                if (change.Value is null)
+                {
+                    derived.Remove(key);
+                    data.Remove(key);
+                    continue;
+                }
+
+                derived[key] = change.Value;
             }
+        }
+
+        foreach (KeyValuePair<string, string?> pair in derived)
+        {
+            // Only a real deviation from the core is worth storing; an equal value keeps the client
+            // reading the core live instead of freezing a copy of it.
+            if (string.Equals(_core[pair.Key], pair.Value, StringComparison.Ordinal))
+                data.Remove(pair.Key);
+            else
+                data[pair.Key] = pair.Value;
         }
 
         return data;
@@ -505,10 +546,11 @@ public sealed class ClientConfigurations : IClientConfigurations, IDisposable
             : null;
 
     private Entry CreateRowEntry(
+        string client,
         IReadOnlyDictionary<string, string?> values,
         IReadOnlyList<ISaConfigurationTransform>? transforms)
     {
-        ClientValuesProvider provider = new(BuildData(values, transforms));
+        ClientValuesProvider provider = new(BuildData(values, transforms, client));
 
         return new Entry(new ConfigurationRoot([provider]), provider);
     }

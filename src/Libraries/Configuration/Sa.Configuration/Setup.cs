@@ -129,10 +129,13 @@ public static class Setup
     ///     .Add("timeout", value =&gt; value is null ? null : $"{value}s"));
     /// </code>
     /// A rule runs only when its key exists in the layer it runs over, so it never adds a key. In a
-    /// client overlay that means the client's own rows: a key the client does not own is left to
-    /// the core pass, which has already transformed it. Returning the received value is not a
-    /// change, so an untouched key is not copied into the pass data. To add keys or turn one key
-    /// into several, use the delegate overload of <see cref="AddSaConfigurationTransform(IConfigurationBuilder, Func{ISaConfigurationView, IEnumerable{KeyValuePair{string, string}}})"/>.
+    /// client overlay the simple overload runs only for the client's own rows: a key the client does
+    /// not own is left to the core pass, which has already transformed it. The context overload
+    /// receives such values with <see cref="ValueTransformContext.IsCoreFallback"/> set and can
+    /// decide for itself; <see cref="ValueTransformContext.ClientId"/> is <see langword="null"/> for
+    /// the root configuration. Returning the received value is not a change, so an untouched key is
+    /// not copied into the pass data. To add keys or turn one key into several, use the delegate
+    /// overload of <see cref="AddSaConfigurationTransform(IConfigurationBuilder, Func{ISaConfigurationView, IEnumerable{KeyValuePair{string, string}}})"/>.
     /// <para>
     /// Rules run after the built-in transforms and after the class-based ones registered before them,
     /// in registration order, and each rule sees the values produced by the earlier transforms.

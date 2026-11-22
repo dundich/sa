@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Sa.Configuration;
 using Sa.Configuration.Clients;
 using Sa.Configuration.PostProcessing;
+using Sa.Configuration.SecretStore;
 
 namespace Sa.ConfigurationTests;
 
@@ -157,6 +158,143 @@ public class ValueTransformTests
     }
 
     [Fact]
+    public void AliasDerivedFromCore_DoesNotEnterTheClientOverlay()
+    {
+        ConfigurationManager core = AliasCore("30");
+        core.AddSaConfigurationValueTransform(rules =>
+            rules.Add("sa:scope:auth", value => value + "s"));
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items = [new("acme", "theme", "light")],
+        });
+
+        Assert.Equal("30s", core["sa:scope:auth"]);
+        Assert.Equal("30s", clients.GetClient("acme")["sa:scope:auth"]);
+    }
+
+    [Fact]
+    public void AliasDerivedFromCore_DoesNotDoubleTransformBothSpellings()
+    {
+        ConfigurationManager core = AliasCore("30");
+        core.AddSaConfigurationValueTransform(rules => rules
+            .Add("auth_base_url", value => value + "s")
+            .Add("sa:scope:auth", value => value + "s"));
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items = [new("acme", "theme", "light")],
+        });
+
+        Assert.Equal("30s", core["auth_base_url"]);
+        Assert.Equal("30s", core["sa:scope:auth"]);
+        Assert.Equal("30s", clients.GetClient("acme")["sa:scope:auth"]);
+    }
+
+    [Fact]
+    public void AliasFromAClientRow_IsOwnedAndTransformedInTheOverlay()
+    {
+        ConfigurationManager core = AliasCore("30");
+        core.AddSaConfigurationValueTransform(rules =>
+            rules.Add("sa:scope:auth", value => value + "s"));
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items =
+            [
+                new("acme", "auth_base_url", "40"),
+                new("acme", "theme", "light"),
+            ],
+        });
+
+        // The core canonical path comes from the core flat value; the client's canonical path is
+        // derived from the client's own flat row and is transformed locally.
+        Assert.Equal("30s", core["sa:scope:auth"]);
+        Assert.Equal("40s", clients.GetClient("acme")["sa:scope:auth"]);
+    }
+
+    [Fact]
+    public void AliasFromTheCore_DoesNotOverrideAClientOwnedCanonical()
+    {
+        ConfigurationManager core = AliasCore("30");
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items =
+            [
+                new("acme", "sa:scope:auth", "client-value"),
+                new("acme", "theme", "light"),
+            ],
+        });
+
+        Assert.Equal("30", core["sa:scope:auth"]);
+        Assert.Equal("client-value", clients.GetClient("acme")["sa:scope:auth"]);
+    }
+
+    [Fact]
+    public void Context_ReportsRootAndClientId()
+    {
+        List<ValueTransformContext> seen = [];
+
+        ConfigurationManager core = new();
+        core.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["theme"] = "dark",
+        });
+        core.AddSaConfigurationValueTransform(rules => rules
+            .Add("theme", (context, value) =>
+            {
+                seen.Add(context);
+                return value;
+            }));
+
+        _ = core["theme"];
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items = [new("acme", "theme", "light")],
+        });
+
+        _ = clients.GetClient("acme")["theme"];
+
+        Assert.Contains(seen, context =>
+            context.Key == "theme"
+            && context.ClientId is null
+            && !context.IsCoreFallback);
+
+        Assert.Contains(seen, context =>
+            context.Key == "theme"
+            && context.ClientId == "acme"
+            && !context.IsCoreFallback);
+    }
+
+    [Fact]
+    public void Context_ReceivesCoreFallbackOfAnAlias()
+    {
+        List<ValueTransformContext> seen = [];
+
+        ConfigurationManager core = AliasCore("30");
+        core.AddSaConfigurationValueTransform(rules => rules
+            .Add("sa:scope:auth", (context, value) =>
+            {
+                seen.Add(context);
+                return value;
+            }));
+
+        using ClientConfigurations clients = Registry(core, new ProviderRows
+        {
+            Items = [new("acme", "theme", "light")],
+        });
+
+        _ = clients.GetClient("acme")["sa:scope:auth"];
+
+        Assert.Contains(seen, context =>
+            context.Key == "sa:scope:auth"
+            && context.ClientId == "acme"
+            && context.IsCoreFallback);
+    }
+
+    [Fact]
     public void Rules_AcceptTheEnvironmentSpellingOfAKey()
     {
         ConfigurationBuilder builder = new();
@@ -172,6 +310,27 @@ public class ValueTransformTests
 
         Assert.Equal("db", config["sa:pg:host"]);
         Assert.Equal("db", config["sa__pg__host"]);
+    }
+
+    private static ConfigurationManager AliasCore(string flatValue)
+    {
+        ConfigurationManager core = new();
+        core.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["auth_base_url"] = flatValue,
+            ["theme"] = "dark",
+        });
+        core.AddSaConfiguration(new SecretOptions
+        {
+            LoadDotEnv = false,
+            Encryption = new SecretEncryptionOptions { Enabled = false },
+            KeyAliases = new KeyAliasOptions
+            {
+                KeyAliases = { ["sa:scope:auth"] = "auth_base_url" },
+            },
+        });
+
+        return core;
     }
 
     private sealed class MutableSource : IConfigurationSource

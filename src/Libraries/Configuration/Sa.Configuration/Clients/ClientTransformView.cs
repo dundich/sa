@@ -8,10 +8,10 @@ namespace Sa.Configuration.Clients;
 /// configuration as a read-only fallback.
 /// </summary>
 /// <remarks>
-/// Only the client's rows are enumerated as <see cref="Values"/>, so a transform never rewrites a
-/// core value into the client's overlay — the fallback exists so an alias can be read from the core
-/// and its canonical path derived for this client. Writes land in the client's working set, which is
-/// how a later transform sees an earlier one's output: the same rule the core pass follows.
+/// Only the client's rows are exposed initially; a later transform can add keys to the working set,
+/// which is how the next transform sees an earlier one's output. A value read from the core
+/// fallback is tracked as such, so a per-key rule is not run a second time over a value the core
+/// pass has already transformed.
 /// <para>
 /// <see cref="TryGetValue"/> answers <see langword="false"/> when the value is <see langword="null"/>,
 /// because <see cref="IConfiguration"/> cannot tell a present null from an absent key. Every
@@ -20,10 +20,15 @@ namespace Sa.Configuration.Clients;
 /// </remarks>
 internal sealed class ClientTransformView(
     Dictionary<string, string?> values,
-    IConfiguration core) : ISaConfigurationView
+    IConfiguration core,
+    string clientId) : ISaConfigurationView, ITransformContextView
 {
     private readonly Dictionary<string, string?> _values = values;
     private readonly IConfiguration _core = core;
+    private readonly HashSet<string> _coreFallback = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <inheritdoc />
+    public string? ClientId { get; } = clientId;
 
     public IEnumerable<KeyValuePair<string, string?>> Values => _values;
 
@@ -38,8 +43,47 @@ internal sealed class ClientTransformView(
         return value is not null;
     }
 
+    /// <inheritdoc />
+    public bool TryGetValueWithOrigin(string key, out string? value, out bool fromCore)
+    {
+        string canonical = ConfigurationKey.Normalize(key);
+
+        if (_values.TryGetValue(canonical, out value))
+        {
+            fromCore = _coreFallback.Contains(canonical);
+            return true;
+        }
+
+        value = _core[canonical];
+        fromCore = true;
+        return value is not null;
+    }
+
+    /// <inheritdoc />
+    public bool IsCoreFallback(string key)
+        => _coreFallback.Contains(ConfigurationKey.Normalize(key));
+
+    /// <inheritdoc />
+    public bool IsOwned(string key)
+    {
+        string canonical = ConfigurationKey.Normalize(key);
+        return _values.ContainsKey(canonical) && !_coreFallback.Contains(canonical);
+    }
+
+    /// <inheritdoc />
+    public void SetOrigin(string key, bool fromCore)
+    {
+        string canonical = ConfigurationKey.Normalize(key);
+
+        if (fromCore)
+            _coreFallback.Add(canonical);
+        else
+            _coreFallback.Remove(canonical);
+    }
+
     /// <summary>
-    /// Records a transform's output so the next transform observes it.
+    /// Records a transform's output so the next transform observes it. The provenance is recorded
+    /// separately by <see cref="SetOrigin"/>.
     /// </summary>
     public void Set(string key, string? value)
         => _values[ConfigurationKey.Normalize(key)] = value;
