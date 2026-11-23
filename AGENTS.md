@@ -19,8 +19,8 @@ A monorepo of independent **Native AOT-compatible** .NET libraries (`Sa.*`) for 
 ## Public API tracking
 - Every library carries `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt` (`Microsoft.CodeAnalysis.PublicApiAnalyzers`). A new or changed public member is **RS0016** until its signature is added to `PublicAPI.Unshipped.txt`; a removed one is **RS0017**.
 - The shipped list is the released surface: when a version is published, move its `Unshipped` entries into `Shipped`.
-- `Version` is **0.21.0** in `src/Libraries/Directory.Build.props`, and `PackageValidationBaselineVersion` pins the last published release (`0.20.0`). Pin the baseline to the new version once that release is published, so a breaking change then fails `dotnet pack` (`EnablePackageValidation`).
-- An intentional break inside a `0.x` minor bump is recorded per project in `CompatibilitySuppressions.xml` (generated with `dotnet pack -p:ApiCompatGenerateSuppressionFile=true`, committed with a comment saying why); the baseline stays pinned, so everything else is still guarded.
+- `Version` is **0.21.0** in `src/Libraries/Directory.Build.props`, and `PackageValidationBaselineVersion` pins the same release. Bump both together when a release goes out, so a breaking change then fails `dotnet pack` (`EnablePackageValidation`).
+- An intentional break inside a `0.x` minor bump is recorded per project in `CompatibilitySuppressions.xml` (generated with `dotnet pack -p:ApiCompatGenerateSuppressionFile=true`, committed with a comment saying why) instead of unpinning the baseline, so everything else stays guarded. The file is dropped again when the baseline is pinned to that release: against itself the recorded removals no longer exist, and ApiCompat fails the pack on unnecessary suppressions.
 
 ## Commands
 

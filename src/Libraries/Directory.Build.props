@@ -47,11 +47,11 @@
     <!--
       Package validation runs on `dotnet pack`: it checks that the package is well formed and
       that its runtime-specific assets agree. `PackageValidationBaselineVersion` pins the last
-      published release (0.20.0), so a breaking API change fails the pack from now on — bump it
+      published release (0.21.0), so a breaking API change fails the pack from now on — bump it
       together with `Version` whenever a release goes out.
     -->
     <EnablePackageValidation>true</EnablePackageValidation>
-    <PackageValidationBaselineVersion>0.20.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>0.21.0</PackageValidationBaselineVersion>
 
     <PackageReadmeFile>Readme.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>

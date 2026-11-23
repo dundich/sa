@@ -414,7 +414,8 @@ nu_push() {
 nu_push_ex() {
   local nuget_key="$1"
   local nuget_source="https://api.nuget.org/v3/index.json"
-  _step "Push packages to $nuget_source (key=$nuget_key)"
+  # The key is never echoed: this output ends up in terminals and CI logs.
+  _step "Push packages to $nuget_source"
 
   while IFS= read -r -d '' package; do
     _step "Push $(basename "$package") to $nuget_source"
