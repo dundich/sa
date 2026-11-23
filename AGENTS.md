@@ -8,7 +8,7 @@ A monorepo of independent **Native AOT-compatible** .NET libraries (`Sa.*`) for 
 - Root solution: `src/Sa.slnx` (XML `.slnx`, not `.sln`).
 - `src/Libraries/` holds 18 projects: **17 packable packages** grouped by domain in `Configuration/`, `Data/`, `Hybrid/`, `Media/`, `Misc/`, `Outbox/`, plus the shared-source base `Sa` (not packed). The packaging list itself is `PROJECTS` in `build-sh/tasks.sh`.
 - `src/Samples/` — 10 runnable examples; `src/Tests/` — 19 test projects + 3 fixture projects; `src/Benchmarks/` — 2 benchmark projects. Shared props/config files stay directly in `src/` (MSBuild/NuGet discover them by walking up from each project).
-- Requires **.NET 10 SDK** (local: 10.0.403; CI: `10.0.x`). Everything targets `net10.0` — a .NET 9 SDK cannot build it.
+- Requires **.NET 10 SDK** 10.0.404 or newer in the same feature band (pinned in both `global.json` files and in CI). 10.0.404 ships ILCompiler 10.0.15; older SDKs (e.g. 10.0.401 with ILCompiler 10.0.12) fail restore with NU1903 / GHSA-p3jp-9v83-76w9 in AOT samples. Everything targets `net10.0` — a .NET 9 SDK cannot build it.
 - **Central Package Management**: all versions live in `src/Directory.Packages.props`. In a `.csproj`, add `<PackageReference Include="X" />` with **no `<Version/>`**.
 
 ## Source file conventions
@@ -72,7 +72,7 @@ Raise both on CI / beefier machines. `--max-parallel-test-modules` is only honou
     A failing test is named with its exception and stack, so a failure on an opaque runner is attributable.
     (With `-v` present the CLI rejects a *bare directory* target — `error: Specifying a directory for 'dotnet test' should be via '--project' or '--solution'` — which is why the target is explicit here.)
   - ❌ `dotnet test --max-parallel-test-modules N --solution Sa.slnx ... -v n`
-    is SDK-dependent. On 10.0.112 it rerouted the CLI to the MSBuild driver and died with `MSB1001`; on 10.0.403 (the current local SDK) the same command starts on the MTP driver with the module cap apparently applied. Verified 2026-11-18. Either way `test_run()` and both CI legs pass no `-v` — `-v n` stays reserved for the single-project shape above.
+    is SDK-dependent. On 10.0.112 it rerouted the CLI to the MSBuild driver and died with `MSB1001`; on 10.0.403 (the SDK used when this was verified) the same command starts on the MTP driver with the module cap apparently applied. Verified 2026-11-18. Either way `test_run()` and both CI legs pass no `-v` — `-v n` stays reserved for the single-project shape above.
   - ⚠️ `--logger "console;verbosity=detailed"` is VSTest-only. On MTP it produces
     `Zero tests ran` and exit code 5 (invalid command-line arguments, per the MTP exit-code table).
     There is no VSTest-style logger for MTP — the runner's own console output already names each

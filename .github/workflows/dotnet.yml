@@ -27,10 +27,12 @@ jobs:
       shell: bash
       run: sed -i 's/\r$//' build-sh/*.sh src/Libraries/Media/Sa.Media.FFmpeg/build/*.sh
 
+    # Keep in sync with the `sdk` pin in global.json: 10.0.404 ships ILCompiler 10.0.15;
+    # older 10.0.4xx patches (e.g. 10.0.401) fail restore with NU1903 in AOT samples.
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: 10.0.x
+        dotnet-version: 10.0.404
 
     - name: Build
       shell: bash
