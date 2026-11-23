@@ -11,10 +11,6 @@ internal static class WavHeaderReader
         public const uint DataSubchunkId = 0x61746164; // "data"
         public const uint RiffChunkId = 0x46464952; // RIFF
         public const uint FormatWave = 0x45564157; //WAVE
-
-        // SubFormat-GUIDs из WAVE_FORMAT_EXTENSIBLE (KSDATAFORMAT_SUBTYPE_*)
-        public static readonly Guid SubtypePcm = new("00000001-0000-0010-8000-00aa00389b71");
-        public static readonly Guid SubtypeIeeeFloat = new("00000003-0000-0010-8000-00aa00389b71");
     }
 
     public static async Task<WavHeader> ReadHeaderAsync(
@@ -79,7 +75,7 @@ internal static class WavHeaderReader
                 channelMask = await reader.ReadInt32Async(cancellationToken).ConfigureAwait(false);
                 subFormatGuid = await reader.ReadGuidAsync(cancellationToken).ConfigureAwait(false);
 
-                if (subFormatGuid != Constants.SubtypePcm && subFormatGuid != Constants.SubtypeIeeeFloat)
+                if (subFormatGuid != WavHeader.PcmSubtypeGuid && subFormatGuid != WavHeader.IeeeFloatSubtypeGuid)
                     throw new NotSupportedException($"WAVE_FORMAT_EXTENSIBLE with unsupported subformat: {subFormatGuid}");
 
                 const int extensiblePayload = 2 + 2 + 4 + 16;
@@ -156,12 +152,14 @@ internal static class WavHeaderReader
                 return (reader.Position, chunkSize); // возвращаем смещение и размер данных
             }
 
-            // Пропускаем чанк (с выравниванием на чётную границу)
-            long paddedSize = (chunkSize % 2 == 0) ? chunkSize : chunkSize + 1;
-            if (paddedSize == 0)
-                throw new InvalidDataException("Invalid WAV file: zero-size chunk");
-
-            await reader.SkipBytesAsync(paddedSize, cancellationToken).ConfigureAwait(false);
+            // Пропускаем чанк (с выравниванием на чётную границу).
+            // Чанк нулевого размера легален по RIFF: пустые LIST/ID3 /bext встречаются
+            // в реальных файлах, и раньше такой файл отвергался целиком. Зацикливания это
+            // не создаёт — id и size (8 байт) уже прочитаны, так что цикл всегда двигается
+            // вперёд. (long) обязателен: (uint)chunkSize + 1 при 0xFFFFFFFF переполняется в 0.
+            long paddedSize = (chunkSize % 2 == 0) ? chunkSize : (long)chunkSize + 1;
+            if (paddedSize > 0)
+                await reader.SkipBytesAsync(paddedSize, cancellationToken).ConfigureAwait(false);
         }
     }
 }
