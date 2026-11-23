@@ -23,6 +23,7 @@ dotnet add package Sa.Outbox.PostgreSql
   - [Runtime settings management](Setup/Readme.md#runtime-settings-management)
 - [Message Lifecycle](Lifecycle/Readme.md)
 - [Result Statuses](#result-statuses)
+- [Tracking (read-only)](#tracking-read-only)
 - [Database Architecture](#database-architecture)
 - [Bulk publishing](Bulk/Readme.md)
 - [Requirements](#requirements)
@@ -217,6 +218,139 @@ After processing each message, call exactly one method:
 
 `Error`/`Error5xx` and `ErrorMaxAttempts` are additionally handed to `IPgOutboxPoisonHandler` before
 the status is written; see [Poison Handler](Setup/Readme.md#5-poison-handler-permanent-failures).
+
+---
+
+## Tracking (read-only)
+
+`IPgOutboxMessageTracker` answers "what happened to the message I published" without raw SQL. The
+provider registers it for you — keyed by the outbox `scopeKey`, plus an unkeyed registration for the
+default key:
+
+```csharp
+IPgOutboxMessageTracker tracker = serviceProvider.GetRequiredService<IPgOutboxMessageTracker>();
+
+IReadOnlyList<PgOutboxMessageTrace> traces = await tracker.GetAsync(
+    payloadId: orderId,
+    tenantId: 1,
+    part: "orders",                                  // optional partition narrowing
+    fromDate: DateTimeOffset.UtcNow.AddDays(-2),     // the default window is 7 days
+    cancellationToken: ct);
+
+foreach (PgOutboxMessageTrace trace in traces)
+{
+    Console.WriteLine($"{trace.MessageId} seq={trace.MsgSeq} loaded={trace.IsLoaded}");
+
+    foreach (PgOutboxDeliveryState delivery in trace.Deliveries)   // one per consumer group
+    {
+        Console.WriteLine(
+            $"  {delivery.ConsumerGroup}: {delivery.StatusCode} attempt={delivery.Attempt} " +
+            $"terminal={delivery.IsTerminal} stuck={delivery.IsStuck} " +
+            $"error={delivery.ErrorType}: {delivery.ErrorMessage}");
+    }
+}
+
+// The attempt timeline (finished deliveries only) from __log$:
+IReadOnlyList<PgOutboxDeliveryAttempt> history = await tracker.GetHistoryAsync(
+    payloadId: orderId, tenantId: 1, consumerGroup: "orders_group");
+```
+
+What the result means:
+
+| Field | Meaning |
+|---|---|
+| `Deliveries` empty | stored, but no consumer group has loaded it yet — **not** `Pending` |
+| `StatusCode` + `StatusMessage` | the last outcome the consumer reported (`Pending` = loaded, not rented) |
+| `Attempt` | `delivery_attempt`; `Postpone` deliberately does not increase it |
+| `LockExpiresOn` | when the task becomes rentable again; `null` = no lease taken yet |
+| `IsStuck` | `Processing` with an expired lease — a crashed worker, not a failure |
+| `IsTerminal` | no further delivery without a manual requeue |
+| `ErrorType` / `ErrorMessage` | the `__error$` row; `Warn` does not write one |
+| `GetHistoryAsync` | every finished attempt, oldest first — the only view of change over time |
+
+For a page of messages, queue health and support:
+
+```csharp
+IReadOnlyList<PgOutboxMessageTrace> page = await tracker.GetManyAsync(orderIds, tenantId: 1, ct);
+IReadOnlyList<PgOutboxStatusCount> counts = await tracker.CountAsync(
+    tenantId: 1, consumerGroup: "orders_group", ct);
+PgOutboxMessagePayload? stored = await tracker.GetPayloadAsync(trace.MessageId, tenantId: 1, ct);
+```
+
+`GetManyAsync` is the same projection with `msg_payload_id = ANY(@ids)`, blank ids dropped and
+duplicates collapsed. `CountAsync` returns one row per `(group, status)` with `Count` and `Stuck`
+(`Processing` with an expired lease) — the shape a health metric wants, without reading payloads.
+`GetPayloadAsync` returns the stored bytes, the payload size and the type name from `__type$`;
+deserialize with the same `IOutboxMessageSerializer` the provider uses.
+
+`SearchAsync` is the dashboard query. Its unit is a **task**, not a message — status, attempts and the
+lease belong to one consumer group — and it pages by keyset, so a deep page costs the same as the first:
+
+```csharp
+IReadOnlyList<PgOutboxTaskEntry> failing = await tracker.SearchAsync(new PgOutboxTaskQuery
+{
+    TenantId = 1,
+    ConsumerGroup = "orders_group",
+    Statuses = [DeliveryStatusCode.Error501, DeliveryStatusCode.MaximumAttemptsError],
+    Limit = 100,
+}, ct);
+
+// Next page: pass the cursor of the last entry, never an offset.
+if (failing.Count > 0)
+{
+    var next = await tracker.SearchAsync(new PgOutboxTaskQuery
+    {
+        TenantId = 1, ConsumerGroup = "orders_group", After = failing[^1].Cursor,
+    }, ct);
+}
+```
+
+An empty `Statuses` collection matches nothing. Ordering is by `msg_seq`, which the task table does not
+index — combine a group/status filter with a narrow window on large queues.
+
+`trace.Stage` is the documented worst-of over the groups that loaded the message: `Failed` if any group
+ended in a permanent error, otherwise `InFlight` if any group still has work scheduled, otherwise
+`Settled`; `NotLoaded` when no group has taken it yet. Groups that have **not** loaded the message are
+invisible to it, so match it against the storage's registry:
+
+```csharp
+IReadOnlyList<PgOutboxConsumerGroup> groups = await tracker.GetConsumerGroupsAsync(tenantId: 1, ct);
+IReadOnlyList<string> missing = trace.GetMissingGroups(groups.Select(g => g.ConsumerGroup));
+```
+
+`__offset$.group_offset_seq` also shows how far each group has read: a message whose `msg_seq` is above
+a group's offset has not even been handed to that group yet. A registered group that never started has
+no offset row at all.
+
+### Requeue
+
+`IPgOutboxMessageMaintenance` (registered next to the tracker) resets a settled delivery so its group
+delivers the message again:
+
+```csharp
+int reset = await maintenance.RequeueAsync(
+    payloadId: orderId, tenantId: 1, consumerGroup: "orders_group");
+
+int resetById = await maintenance.RequeueByMessageIdAsync(trace.MessageId, tenantId: 1);
+```
+
+The `PgOutboxPoisonMessage.TaskId` the poison handler already holds is the usual requeue candidate:
+
+```csharp
+int resetByTask = await maintenance.RequeueTaskAsync(poison.TaskId, tenantId: 1);
+```
+
+Only settled tasks are reset: `Pending`/`Processing`/`Postpone`/`Retry`/`Warn` are still owned by the
+delivery pipeline, so a requeue never steals a live lease or cancels a scheduled retry. The group's
+cursor is not touched (the task row already exists), and the requeue works only inside the group's
+delivery lookback — seven days by default. Delivery stays at-least-once: the consumer sees the message
+again and must be idempotent.
+
+Caveats: `msg_payload_id` is **not unique**, so the result is a list; `msg_seq` (not the v7 id) is the
+delivery order; rows older than `DropPartsAfterRetention` (30 days by default) are gone with their
+partitions; a publish inside the caller's transaction is invisible to the tracker until that
+transaction commits; and `msg_payload_id` is not indexed, so the lookup scans the matching daily
+leaves — pass a narrow `part`/`fromDate` for large tables.
 
 ---
 

@@ -292,7 +292,7 @@ PgOutboxSettings
 | `MsgPayloadType` | `msg_payload_type` | `BIGINT NOT NULL DEFAULT 0` | Хэш типа payload (murmurHash3), совпадает с реестром `__type$` |
 | `MsgPayload` | `msg_payload` | `BYTEA NOT NULL` | Сериализованный payload сообщения |
 | `MsgPayloadSize` | `msg_payload_size` | `INT NOT NULL DEFAULT 0` | Размер payload в байтах |
-| `MsgCreatedAt` | `msg_created_at` | `BIGINT NOT NULL DEFAULT 0` | Время создания (ticks); timestamp-колонка партиционирования |
+| `MsgCreatedAt` | `msg_created_at` | `BIGINT NOT NULL DEFAULT 0` | Время создания (unix-секунды); timestamp-колонка партиционирования |
 
 #### Таблица очереди задач (`outbox`) — 18 колонок
 
@@ -300,7 +300,7 @@ PgOutboxSettings
 |---|---|---|---|
 | `TaskId` | `task_id` | `BIGSERIAL NOT NULL` | Surrogate id задачи |
 | `ConsumerGroup` | `consumer_group` | `TEXT NOT NULL` | Группа консьюмеров; второй ключ партиционирования |
-| `TaskLockExpiresOn` | `task_lock_expires_on` | `BIGINT NOT NULL DEFAULT 0` | TTL блокировки (ticks) — конкуренты на `SKIP LOCKED` пропускают строки, у которых лок ещё действует |
+| `TaskLockExpiresOn` | `task_lock_expires_on` | `BIGINT NOT NULL DEFAULT 0` | TTL блокировки (unix-секунды) — конкуренты на `SKIP LOCKED` пропускают строки, у которых лок ещё действует |
 | `TaskTransactId` | `task_transact_id` | `TEXT NOT NULL DEFAULT ''` | Id транзакции / корреляции воркера, обрабатывающего задачу |
 | `MsgSeq` | `msg_seq` | `BIGINT NOT NULL DEFAULT 0` | Исходный `msg_seq` (денормализован) — загружается вместе с задачей и возвращается `SqlLoadConsumerGroup` как новый курсор |
 | `MsgId` | `msg_id` | `UUID NOT NULL` | Ссылка на исходное сообщение (v7 UUID) |
@@ -313,7 +313,7 @@ PgOutboxSettings
 | `DeliveryAttempt` | `delivery_attempt` | `INT NOT NULL DEFAULT 0` | Счётчик попыток доставки |
 | `DeliveryStatusCode` | `delivery_status_code` | `INT NOT NULL DEFAULT 0` | Код статуса доставки; `0` = `DeliveryStatusCode.Pending` |
 | `DeliveryStatusMessage` | `delivery_status_message` | `TEXT NOT NULL DEFAULT ''` | Текстовый статус / сообщение об ошибке |
-| `DeliveryCreatedAt` | `delivery_created_at` | `BIGINT NOT NULL DEFAULT 0` | Время начала доставки (ticks) |
+| `DeliveryCreatedAt` | `delivery_created_at` | `BIGINT NOT NULL DEFAULT 0` | Время завершения или переноса доставки (unix-секунды) |
 | `ErrorId` | `error_id` | `BIGINT NOT NULL DEFAULT 0` | Ссылка на запись `__error$` для перманентных сбоев |
 | `TaskCreatedAt` | `task_created_at` | `BIGINT NOT NULL DEFAULT 0` | Время создания задачи; timestamp-колонка партиционирования |
 

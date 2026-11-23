@@ -370,6 +370,82 @@ public class SqlOutboxBuilderTests
         Assert.Contains("@lck_ns", sql, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TrackingTemplates_RequireTenantAndWindow_AndRequeueSparesRentableTasks()
+    {
+        // Every tracking template is list-partitioned by tenant and by day: losing the tenant or the
+        // window turns a point lookup into a scan of every leaf the outbox owns. Requeue must never
+        // reset a task the pipeline can still rent (Pending/Processing/Postpone/Retry/Warn) — that
+        // would steal a live lease or cancel a scheduled retry.
+        var builder = Create();
+        var settings = new PgOutboxTableSettings();
+
+        foreach (var (name, sql) in AllTrackingTemplates(builder))
+        {
+            var executable = ExecutableSql(sql);
+
+            // __error$ has no tenant column at all: it is partitioned by day only and reached by the
+            // error id. Every other template must carry the tenant or it loses partition pruning.
+            if (name != nameof(builder.SqlTrackErrors))
+                Assert.Contains(SqlParam.TenantId, executable, StringComparison.Ordinal);
+
+            Assert.Contains(SqlParam.WindowFrom, executable, StringComparison.Ordinal);
+            Assert.Contains(SqlParam.WindowTo, executable, StringComparison.Ordinal);
+            Assert.True(executable.Trim().Length > 0, name);
+        }
+
+        Assert.Contains(
+            "LEFT JOIN",
+            ExecutableSql(builder.SqlTrackMessagesByPayload),
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            SqlParam.CursorSeq,
+            ExecutableSql(builder.SqlTrackSearch),
+            StringComparison.Ordinal);
+
+        var requeue = ExecutableSql(builder.SqlRequeueByPayload);
+
+        Assert.Contains(
+            $"{settings.TaskQueue.Fields.DeliveryStatusCode}={(int)DeliveryStatusCode.Pending}",
+            requeue,
+            StringComparison.Ordinal);
+
+        Assert.Contains(
+            $"NOT IN ({(int)DeliveryStatusCode.Pending},"
+            + $"{(int)DeliveryStatusCode.Processing},"
+            + $"{(int)DeliveryStatusCode.Postpone},"
+            + $"{(int)DeliveryStatusCode.Retry},"
+            + $"{(int)DeliveryStatusCode.Warn})",
+            requeue,
+            StringComparison.Ordinal);
+
+        Assert.DoesNotContain("DELETE", requeue, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (string Name, string Sql)[] AllTrackingTemplates(SqlOutboxBuilder b) => new (string, string)[]
+    {
+        (nameof(b.SqlTrackMessagesByPayload), b.SqlTrackMessagesByPayload),
+        (nameof(b.SqlTrackMessagesByPayloadAndPart), b.SqlTrackMessagesByPayloadAndPart),
+        (nameof(b.SqlTrackMessagesByPayloads), b.SqlTrackMessagesByPayloads),
+        (nameof(b.SqlTrackMessagesByPayloadsAndPart), b.SqlTrackMessagesByPayloadsAndPart),
+        (nameof(b.SqlTrackMessageById), b.SqlTrackMessageById),
+        (nameof(b.SqlTrackMessagesByPayloadNoTask), b.SqlTrackMessagesByPayloadNoTask),
+        (nameof(b.SqlTrackMessagesByPayloadAndPartNoTask), b.SqlTrackMessagesByPayloadAndPartNoTask),
+        (nameof(b.SqlTrackMessagesByPayloadsNoTask), b.SqlTrackMessagesByPayloadsNoTask),
+        (nameof(b.SqlTrackMessagesByPayloadsAndPartNoTask), b.SqlTrackMessagesByPayloadsAndPartNoTask),
+        (nameof(b.SqlTrackMessageByIdNoTask), b.SqlTrackMessageByIdNoTask),
+        (nameof(b.SqlTrackHistory), b.SqlTrackHistory),
+        (nameof(b.SqlTrackCounts), b.SqlTrackCounts),
+        (nameof(b.SqlTrackSearch), b.SqlTrackSearch),
+        (nameof(b.SqlTrackErrors), b.SqlTrackErrors),
+        (nameof(b.SqlTrackPayload), b.SqlTrackPayload),
+        (nameof(b.SqlTrackPayloadNoType), b.SqlTrackPayloadNoType),
+        (nameof(b.SqlRequeueByPayload), b.SqlRequeueByPayload),
+        (nameof(b.SqlRequeueByMessageId), b.SqlRequeueByMessageId),
+        (nameof(b.SqlRequeueByTaskId), b.SqlRequeueByTaskId),
+    };
+
     private static int CountDistinctParams(string sql)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
@@ -380,8 +456,8 @@ public class SqlOutboxBuilderTests
         return names.Count;
     }
 
-    private static (string Name, string Sql)[] AllTemplates(SqlOutboxBuilder b) => new (string, string)[]
-    {
+    private static (string Name, string Sql)[] AllTemplates(SqlOutboxBuilder b) =>
+    [
         (nameof(b.SqlBulkMsgCopy), b.SqlBulkMsgCopy),
         (nameof(b.SqlLockAndSelect), b.SqlLockAndSelect),
         (nameof(b.SqlExtendDelivery), b.SqlExtendDelivery),
@@ -404,5 +480,6 @@ public class SqlOutboxBuilderTests
         (nameof(b.SqlCreateMsgCursorIndex), b.SqlCreateMsgCursorIndex),
         (nameof(b.SqlError), b.SqlError(1)),
         (nameof(b.SqlFinishDelivery), b.SqlFinishDelivery(1)),
-    };
+        .. AllTrackingTemplates(b),
+    ];
 }

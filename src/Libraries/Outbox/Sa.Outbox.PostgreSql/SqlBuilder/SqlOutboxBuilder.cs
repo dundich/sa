@@ -405,6 +405,380 @@ ON {settings.GetQualifiedMsgTableName()} (
 """;
 
 
+    // ── Tracking (IPgOutboxMessageTracker) ──────────────────────────────────────────────────────
+    // Read-only projections. The message table is LIST-partitioned by (tenant_id, msg_part) and by
+    // day on msg_created_at; the task, delivery and error tables by (tenant_id, consumer_group) and
+    // by day. Every template therefore requires a tenant and a window: without them the query would
+    // scan every leaf the outbox owns.
+    //
+    // The task side is LEFT-JOINed on purpose: a message exists before any consumer group loads it,
+    // and "no task row" is meaningful ("not loaded"), not an error. The projection is aliased
+    // because msg_id/tenant_id/msg_part/msg_created_at are named the same in both tables — see
+    // SqlTrackColumn. The reader depends on the projection ORDER, not on the aliases.
+    public readonly string SqlTrackMessagesByPayload = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}={SqlParam.PayloadId}",
+        partFilter: null,
+        joinTask: true);
+
+    public readonly string SqlTrackMessagesByPayloadAndPart = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}={SqlParam.PayloadId}",
+        $"m.{settings.Message.Fields.MsgPart}={SqlParam.MsgPart}",
+        joinTask: true);
+
+    public readonly string SqlTrackMessageById = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgId}={SqlParam.MsgId}",
+        partFilter: null,
+        joinTask: true);
+
+    public readonly string SqlTrackMessagesByPayloads = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}=ANY({SqlParam.PayloadIds})",
+        partFilter: null,
+        joinTask: true);
+
+    public readonly string SqlTrackMessagesByPayloadsAndPart = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}=ANY({SqlParam.PayloadIds})",
+        $"m.{settings.Message.Fields.MsgPart}={SqlParam.MsgPart}",
+        joinTask: true);
+
+    // The task table is created lazily, on the first consumer-group load. Before that a message is
+    // simply "not loaded", and the same projection has to be produced without the join.
+    public readonly string SqlTrackMessagesByPayloadNoTask = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}={SqlParam.PayloadId}",
+        partFilter: null,
+        joinTask: false);
+
+    public readonly string SqlTrackMessagesByPayloadAndPartNoTask = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}={SqlParam.PayloadId}",
+        $"m.{settings.Message.Fields.MsgPart}={SqlParam.MsgPart}",
+        joinTask: false);
+
+    public readonly string SqlTrackMessageByIdNoTask = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgId}={SqlParam.MsgId}",
+        partFilter: null,
+        joinTask: false);
+
+    public readonly string SqlTrackMessagesByPayloadsNoTask = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}=ANY({SqlParam.PayloadIds})",
+        partFilter: null,
+        joinTask: false);
+
+    public readonly string SqlTrackMessagesByPayloadsAndPartNoTask = BuildTrackMessages(
+        settings,
+        $"m.{settings.Message.Fields.MsgPayloadId}=ANY({SqlParam.PayloadIds})",
+        $"m.{settings.Message.Fields.MsgPart}={SqlParam.MsgPart}",
+        joinTask: false);
+
+
+    // Newest-first + LIMIT, then reversed by the tracker: an ascending LIMIT would keep the OLDEST
+    // attempts of a long-retrying message and hide the ones the caller is asking about.
+    public readonly string SqlTrackHistory = $"""
+SELECT
+  l.{settings.Delivery.Fields.DeliveryId},
+  l.{settings.Delivery.Fields.ConsumerGroup},
+  l.{settings.Delivery.Fields.TaskId},
+  l.{settings.Delivery.Fields.DeliveryStatusCode},
+  l.{settings.Delivery.Fields.DeliveryStatusMessage},
+  l.{settings.Delivery.Fields.DeliveryCreatedAt},
+  l.{settings.Delivery.Fields.ErrorId}
+FROM {settings.GetQualifiedDeliveryTableName()} l
+WHERE
+  l.{settings.Delivery.Fields.TenantId}={SqlParam.TenantId}
+  AND l.{settings.Delivery.Fields.MsgPayloadId}={SqlParam.PayloadId}
+  AND l.{settings.Delivery.Fields.DeliveryCreatedAt}>={SqlParam.WindowFrom}
+  AND l.{settings.Delivery.Fields.DeliveryCreatedAt}<={SqlParam.WindowTo}
+  AND ({SqlParam.ConsumerGroupId} IS NULL OR l.{settings.Delivery.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId})
+ORDER BY l.{settings.Delivery.Fields.DeliveryCreatedAt} DESC, l.{settings.Delivery.Fields.DeliveryId} DESC
+LIMIT {SqlParam.Limit}
+;
+""";
+
+
+    // Status counts for dashboards and health checks: one row per (group, status). Stuck is folded in
+    // as a FILTER over the same pass — "Processing with an expired lease" is not a status of its own,
+    // but it is the number an operator actually watches.
+    public readonly string SqlTrackCounts = $"""
+SELECT
+  {settings.TaskQueue.Fields.ConsumerGroup},
+  {settings.TaskQueue.Fields.DeliveryStatusCode},
+  COUNT(*),
+  COUNT(*) FILTER (
+    WHERE {settings.TaskQueue.Fields.DeliveryStatusCode}={(int)DeliveryStatusCode.Processing}
+      AND {settings.TaskQueue.Fields.TaskLockExpiresOn}<{SqlParam.NowDate}
+  )
+FROM {settings.GetQualifiedTaskTableName()}
+WHERE
+  {settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
+  AND {settings.TaskQueue.Fields.TaskCreatedAt}>={SqlParam.WindowFrom}
+  AND {settings.TaskQueue.Fields.TaskCreatedAt}<={SqlParam.WindowTo}
+  AND ({SqlParam.ConsumerGroupId} IS NULL OR {settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId})
+  AND ({SqlParam.MsgPart} IS NULL OR {settings.TaskQueue.Fields.MsgPart}={SqlParam.MsgPart})
+GROUP BY {settings.TaskQueue.Fields.ConsumerGroup}, {settings.TaskQueue.Fields.DeliveryStatusCode}
+ORDER BY {settings.TaskQueue.Fields.ConsumerGroup}, {settings.TaskQueue.Fields.DeliveryStatusCode}
+;
+""";
+
+
+    // Search over the task table alone: every column a dashboard needs (part, payload id, message
+    // time) is denormalised there, so there is no join to the message table. The cursor is the
+    // (msg_seq, task_id) pair — msg_seq is not unique in this table because a message has one task per
+    // group. ORDER BY that pair is a sort over the window: the task table has no index on msg_seq
+    // (its primary key starts at task_id), which is the accepted cost of not indexing the write path.
+    public readonly string SqlTrackSearch = $"""
+SELECT
+  t.{settings.TaskQueue.Fields.TaskId},
+  t.{settings.TaskQueue.Fields.ConsumerGroup},
+  t.{settings.TaskQueue.Fields.MsgId},
+  t.{settings.TaskQueue.Fields.MsgSeq},
+  t.{settings.TaskQueue.Fields.MsgPayloadId},
+  t.{settings.TaskQueue.Fields.MsgPart},
+  t.{settings.TaskQueue.Fields.MsgCreatedAt},
+  t.{settings.TaskQueue.Fields.TaskCreatedAt},
+  t.{settings.TaskQueue.Fields.DeliveryStatusCode},
+  t.{settings.TaskQueue.Fields.DeliveryStatusMessage},
+  t.{settings.TaskQueue.Fields.DeliveryAttempt},
+  t.{settings.TaskQueue.Fields.DeliveryCreatedAt},
+  t.{settings.TaskQueue.Fields.TaskLockExpiresOn},
+  t.{settings.TaskQueue.Fields.ErrorId}
+FROM {settings.GetQualifiedTaskTableName()} t
+WHERE
+  t.{settings.TaskQueue.Fields.TenantId}={SqlParam.TenantId}
+  AND t.{settings.TaskQueue.Fields.TaskCreatedAt}>={SqlParam.WindowFrom}
+  AND t.{settings.TaskQueue.Fields.TaskCreatedAt}<={SqlParam.WindowTo}
+  AND ({SqlParam.ConsumerGroupId} IS NULL OR t.{settings.TaskQueue.Fields.ConsumerGroup}={SqlParam.ConsumerGroupId})
+  AND ({SqlParam.MsgPart} IS NULL OR t.{settings.TaskQueue.Fields.MsgPart}={SqlParam.MsgPart})
+  AND ({SqlParam.Statuses} IS NULL OR t.{settings.TaskQueue.Fields.DeliveryStatusCode}=ANY({SqlParam.Statuses}))
+  AND ({SqlParam.CursorSeq} IS NULL OR (t.{settings.TaskQueue.Fields.MsgSeq}, t.{settings.TaskQueue.Fields.TaskId}) > ({SqlParam.CursorSeq}, {SqlParam.CursorTask}))
+ORDER BY t.{settings.TaskQueue.Fields.MsgSeq}, t.{settings.TaskQueue.Fields.TaskId}
+LIMIT {SqlParam.Limit}
+;
+""";
+
+
+    // Payload inspection for support: the bytes exactly as stored plus the type name from __type$.
+    // The type table is small and unpartitioned, so the join is cheap; the no-type variant exists only
+    // because the table is created lazily with the rest of the schema.
+    public readonly string SqlTrackPayload = $"""
+SELECT
+  m.{settings.Message.Fields.MsgId},
+  m.{settings.Message.Fields.MsgPayloadType},
+  t.{settings.Type.Fields.TypeName},
+  m.{settings.Message.Fields.MsgPayloadSize},
+  m.{settings.Message.Fields.MsgPayload}
+FROM {settings.GetQualifiedMsgTableName()} m
+LEFT JOIN {settings.GetQualifiedTypeTableName()} t
+  ON t.{settings.Type.Fields.TypeId}=m.{settings.Message.Fields.MsgPayloadType}
+WHERE
+  m.{settings.Message.Fields.TenantId}={SqlParam.TenantId}
+  AND m.{settings.Message.Fields.MsgId}={SqlParam.MsgId}
+  AND m.{settings.Message.Fields.MsgCreatedAt}>={SqlParam.WindowFrom}
+  AND m.{settings.Message.Fields.MsgCreatedAt}<={SqlParam.WindowTo}
+;
+""";
+
+    public readonly string SqlTrackPayloadNoType = $"""
+SELECT
+  m.{settings.Message.Fields.MsgId},
+  m.{settings.Message.Fields.MsgPayloadType},
+  NULL::text,
+  m.{settings.Message.Fields.MsgPayloadSize},
+  m.{settings.Message.Fields.MsgPayload}
+FROM {settings.GetQualifiedMsgTableName()} m
+WHERE
+  m.{settings.Message.Fields.TenantId}={SqlParam.TenantId}
+  AND m.{settings.Message.Fields.MsgId}={SqlParam.MsgId}
+  AND m.{settings.Message.Fields.MsgCreatedAt}>={SqlParam.WindowFrom}
+  AND m.{settings.Message.Fields.MsgCreatedAt}<={SqlParam.WindowTo}
+;
+""";
+
+
+    // error_id is a hash of the composed exception text, so every row carrying the same id also
+    // carries the same type and message. That lets the tracker look the rows up by id over the whole
+    // window instead of pairing each task with one exact day: a consumer that reports a timestamp
+    // with a non-zero offset makes StartOfDay land on a different instant than UTC midnight, and a
+    // day-exact join would silently miss its error row.
+    public readonly string SqlTrackErrors = $"""
+SELECT
+  {settings.Error.Fields.ErrorId},
+  {settings.Error.Fields.ErrorType},
+  {settings.Error.Fields.ErrorMessage}
+FROM {settings.GetQualifiedErrorTableName()}
+WHERE
+  {settings.Error.Fields.ErrorId}=ANY({SqlParam.ErrorIds})
+  AND {settings.Error.Fields.ErrorCreatedAt}>={SqlParam.WindowFrom}
+  AND {settings.Error.Fields.ErrorCreatedAt}<={SqlParam.WindowTo}
+ORDER BY {settings.Error.Fields.ErrorCreatedAt}
+;
+""";
+
+
+    // The offset table is the storage's own group registry: a row appears on the group's first poll
+    // (OutboxTaskLoader.InitializeOffsetAsync) and carries the cursor that group currently points at.
+    // A group registered in DI but never started has no row — which is exactly the distinction a
+    // caller needs between "this group has not consumed yet" and "there is no such group".
+    public readonly string SqlTrackConsumerGroups = $"""
+SELECT
+  {settings.Offset.Fields.ConsumerGroup},
+  {settings.Offset.Fields.TenantId},
+  {settings.Offset.Fields.GroupOffsetSeq},
+  {settings.Offset.Fields.GroupUpdatedAt}
+FROM {settings.GetQualifiedOffsetTableName()}
+WHERE {settings.Offset.Fields.TenantId}={SqlParam.TenantId}
+ORDER BY {settings.Offset.Fields.ConsumerGroup}
+;
+""";
+
+
+    // Requeue resets a SETTLED task only: everything the lock-and-select query can still rent
+    // (Pending/Processing/Postpone/Retry/Warn) is left alone, so a requeue can never steal a task
+    // from a live worker or cancel a scheduled retry. The group's cursor is NOT touched: the task row
+    // already exists, and the loader only inserts rows for msg_seq > cursor, so a reset task is
+    // picked up by the next rent without replaying anything else.
+    public readonly string SqlRequeueByPayload = BuildRequeue(
+        settings,
+        $"{settings.TaskQueue.Fields.MsgPayloadId}={SqlParam.PayloadId}");
+
+    public readonly string SqlRequeueByMessageId = BuildRequeue(
+        settings,
+        $"{settings.TaskQueue.Fields.MsgId}={SqlParam.MsgId}");
+
+    // The task id is what PgOutboxPoisonMessage hands the handler, and the task table's primary key
+    // starts with it, so this is the cheapest requeue of all — no payload-id scan.
+    public readonly string SqlRequeueByTaskId = BuildRequeue(
+        settings,
+        $"{settings.TaskQueue.Fields.TaskId}={SqlParam.TaskId}");
+
+
+    // The task, delivery and error tables are created lazily (on the first load / first error), so a
+    // tracker call against a fresh deployment must not assume they exist. One pg_catalog lookup tells
+    // the tracker which of the four tables it may query; names are bound as values, so quoting is a
+    // non-issue here.
+    public readonly string SqlTrackExistingTables = $"""
+SELECT c.relname
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname={SqlParam.TrackSchema}
+  AND c.relname=ANY({SqlParam.TrackTables})
+;
+""";
+
+
+    private static string BuildTrackMessages(
+        PgOutboxTableSettings settings,
+        string keyPredicate,
+        string? partFilter,
+        bool joinTask)
+    {
+        var msg = settings.Message.Fields;
+        var task = settings.TaskQueue.Fields;
+
+        string partLine = partFilter is null ? string.Empty : $"  AND {partFilter}\n";
+
+        string taskColumns = joinTask
+            ? $"""
+  t.{task.ConsumerGroup} AS "{SqlTrackColumn.ConsumerGroup}",
+  t.{task.TaskId} AS "{SqlTrackColumn.TaskId}",
+  t.{task.DeliveryStatusCode} AS "{SqlTrackColumn.StatusCode}",
+  t.{task.DeliveryStatusMessage} AS "{SqlTrackColumn.StatusMessage}",
+  t.{task.DeliveryAttempt} AS "{SqlTrackColumn.Attempt}",
+  t.{task.TaskCreatedAt} AS "{SqlTrackColumn.TaskCreatedAt}",
+  t.{task.DeliveryCreatedAt} AS "{SqlTrackColumn.DeliveredAt}",
+  t.{task.TaskLockExpiresOn} AS "{SqlTrackColumn.LockExpiresOn}",
+  t.{task.ErrorId} AS "{SqlTrackColumn.ErrorId}"
+"""
+            // Typed NULLs keep the projection identical (and the reader ordinal-stable) when the task
+            // table does not exist yet. Every one of these is NULL after the LEFT JOIN in the other
+            // branch as well, so the reader never needs to know which branch produced the row.
+            : $"""
+  NULL::text AS "{SqlTrackColumn.ConsumerGroup}",
+  NULL::bigint AS "{SqlTrackColumn.TaskId}",
+  NULL::integer AS "{SqlTrackColumn.StatusCode}",
+  NULL::text AS "{SqlTrackColumn.StatusMessage}",
+  NULL::integer AS "{SqlTrackColumn.Attempt}",
+  NULL::bigint AS "{SqlTrackColumn.TaskCreatedAt}",
+  NULL::bigint AS "{SqlTrackColumn.DeliveredAt}",
+  NULL::bigint AS "{SqlTrackColumn.LockExpiresOn}",
+  NULL::bigint AS "{SqlTrackColumn.ErrorId}"
+""";
+
+        string from = joinTask
+            ? $"""
+FROM {settings.GetQualifiedMsgTableName()} m
+LEFT JOIN {settings.GetQualifiedTaskTableName()} t
+  ON t.{task.MsgId} = m.{msg.MsgId}
+ AND t.{task.TenantId} = m.{msg.TenantId}
+ AND t.{task.TaskCreatedAt}>={SqlParam.WindowFrom}
+ AND t.{task.TaskCreatedAt}<={SqlParam.WindowTo}
+"""
+            : $"FROM {settings.GetQualifiedMsgTableName()} m";
+
+        string orderBy = joinTask
+            ? $"ORDER BY m.{msg.MsgSeq}, t.{task.ConsumerGroup}"
+            : $"ORDER BY m.{msg.MsgSeq}";
+
+        return $"""
+SELECT
+  m.{msg.MsgId} AS "{SqlTrackColumn.MessageId}",
+  m.{msg.MsgSeq} AS "{SqlTrackColumn.MsgSeq}",
+  m.{msg.MsgPayloadId} AS "{SqlTrackColumn.PayloadId}",
+  m.{msg.TenantId} AS "{SqlTrackColumn.TenantId}",
+  m.{msg.MsgPart} AS "{SqlTrackColumn.Part}",
+  m.{msg.MsgCreatedAt} AS "{SqlTrackColumn.CreatedAt}",
+{taskColumns}
+{from}
+WHERE
+  m.{msg.TenantId}={SqlParam.TenantId}
+  AND m.{msg.MsgCreatedAt}>={SqlParam.WindowFrom}
+  AND m.{msg.MsgCreatedAt}<={SqlParam.WindowTo}
+  AND {keyPredicate}
+{partLine}{orderBy}
+;
+""";
+    }
+
+
+    /// <summary>
+    /// Resets settled tasks to <see cref="DeliveryStatusCode.Pending"/> and clears the delivery
+    /// bookkeeping, so the next rent re-delivers them. Tasks that are still rentable are excluded —
+    /// their status is proof someone else (or a scheduled retry) owns them.
+    /// </summary>
+    private static string BuildRequeue(PgOutboxTableSettings settings, string keyPredicate)
+    {
+        var task = settings.TaskQueue.Fields;
+
+        return $"""
+UPDATE {settings.GetQualifiedTaskTableName()}
+SET
+  {task.DeliveryStatusCode}={(int)DeliveryStatusCode.Pending},
+  {task.DeliveryStatusMessage}='',
+  {task.DeliveryAttempt}=0,
+  {task.DeliveryId}=0,
+  {task.DeliveryCreatedAt}=0,
+  {task.ErrorId}=0,
+  {task.TaskTransactId}='',
+  {task.TaskLockExpiresOn}=0
+WHERE
+  {task.TenantId}={SqlParam.TenantId}
+  AND {task.TaskCreatedAt}>={SqlParam.WindowFrom}
+  AND {task.TaskCreatedAt}<={SqlParam.WindowTo}
+  AND ({SqlParam.ConsumerGroupId} IS NULL OR {task.ConsumerGroup}={SqlParam.ConsumerGroupId})
+  AND ({SqlParam.MsgPart} IS NULL OR {task.MsgPart}={SqlParam.MsgPart})
+  AND {task.DeliveryStatusCode} NOT IN ({LockAndSelectStatusCodes})
+  AND {keyPredicate}
+;
+""";
+    }
+
+
     // NB: the cursor is `msg_seq`, the database-assigned insertion order, not `msg_id` (v7 UUID).
     // A v7 id is minted by application clocks, so a message inserted after the cursor advanced can
     // sort *below* it (skewed clocks between app instances, backdating) and would be skipped by

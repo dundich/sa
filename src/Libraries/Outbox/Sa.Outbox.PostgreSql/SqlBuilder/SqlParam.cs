@@ -45,4 +45,18 @@ internal static class SqlParam
     public const string ErrorId = "@err_id";
     public const string MsgId = "@msg_id";
     public const string FloorDate = "@flr_date";
+
+    // Tracking (IPgOutboxMessageTracker). Read-only projections do not share a parameter collection
+    // with the write path, so reusing @p_id/@tnt/@win_from there is safe and keeps the names familiar.
+    public const string ErrorIds = "@err_ids";
+    public const string TrackSchema = "@sch";
+    public const string TrackTables = "@tbls";
+    /// <summary>The set of caller-supplied payload ids a bulk tracking lookup matches.</summary>
+    public const string PayloadIds = "@p_ids";
+    /// <summary>The status set a search matches, or NULL for every status.</summary>
+    public const string Statuses = "@sts";
+    /// <summary>Keyset cursor: the <c>msg_seq</c> half of the last returned task.</summary>
+    public const string CursorSeq = "@cur_seq";
+    /// <summary>Keyset cursor: the <c>task_id</c> half of the last returned task.</summary>
+    public const string CursorTask = "@cur_task";
 }

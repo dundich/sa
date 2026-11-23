@@ -293,7 +293,7 @@ Each table exposes a get-only `Fields` object holding one string property per co
 | `MsgPayloadType` | `msg_payload_type` | `BIGINT NOT NULL DEFAULT 0` | Hash of the payload type (murmurHash3), matching the `__type$` registry |
 | `MsgPayload` | `msg_payload` | `BYTEA NOT NULL` | Serialized message payload |
 | `MsgPayloadSize` | `msg_payload_size` | `INT NOT NULL DEFAULT 0` | Payload size in bytes |
-| `MsgCreatedAt` | `msg_created_at` | `BIGINT NOT NULL DEFAULT 0` | Creation time (ticks); partition timestamp column |
+| `MsgCreatedAt` | `msg_created_at` | `BIGINT NOT NULL DEFAULT 0` | Creation time (unix seconds); partition timestamp column |
 
 #### Task queue table (`outbox`) — 18 columns
 
@@ -301,7 +301,7 @@ Each table exposes a get-only `Fields` object holding one string property per co
 |---|---|---|---|
 | `TaskId` | `task_id` | `BIGSERIAL NOT NULL` | Task surrogate id |
 | `ConsumerGroup` | `consumer_group` | `TEXT NOT NULL` | Consumer group; second partitioning key |
-| `TaskLockExpiresOn` | `task_lock_expires_on` | `BIGINT NOT NULL DEFAULT 0` | Lock TTL (ticks) — consumers competing with `SKIP LOCKED` skip rows whose lock is still valid |
+| `TaskLockExpiresOn` | `task_lock_expires_on` | `BIGINT NOT NULL DEFAULT 0` | Lock TTL (unix seconds) — consumers competing with `SKIP LOCKED` skip rows whose lock is still valid |
 | `TaskTransactId` | `task_transact_id` | `TEXT NOT NULL DEFAULT ''` | Transaction / correlation id of the worker processing the task |
 | `MsgSeq` | `msg_seq` | `BIGINT NOT NULL DEFAULT 0` | Source `msg_seq` (denormalized) — loaded with the task, returned by `SqlLoadConsumerGroup` as the new cursor |
 | `MsgId` | `msg_id` | `UUID NOT NULL` | Reference to the source message (v7 UUID) |
@@ -314,7 +314,7 @@ Each table exposes a get-only `Fields` object holding one string property per co
 | `DeliveryAttempt` | `delivery_attempt` | `INT NOT NULL DEFAULT 0` | Delivery attempt counter |
 | `DeliveryStatusCode` | `delivery_status_code` | `INT NOT NULL DEFAULT 0` | Delivery status code; `0` = `DeliveryStatusCode.Pending` |
 | `DeliveryStatusMessage` | `delivery_status_message` | `TEXT NOT NULL DEFAULT ''` | Free-text status / error message |
-| `DeliveryCreatedAt` | `delivery_created_at` | `BIGINT NOT NULL DEFAULT 0` | Time the delivery started (ticks) |
+| `DeliveryCreatedAt` | `delivery_created_at` | `BIGINT NOT NULL DEFAULT 0` | Time the delivery completed or was postponed (unix seconds) |
 | `ErrorId` | `error_id` | `BIGINT NOT NULL DEFAULT 0` | Reference to the `__error$` row for permanent failures |
 | `TaskCreatedAt` | `task_created_at` | `BIGINT NOT NULL DEFAULT 0` | Task creation time; partition timestamp column |
 

@@ -24,6 +24,7 @@ dotnet add package Sa.Outbox.PostgreSql
   - [Runtime-управление настройками](Setup/Readme-ru.md#runtime-управление-настройками)
 - [Жизненный цикл сообщения](Lifecycle/Readme-ru.md)
 - [Статусы результата](#статусы-результата)
+- [Отслеживание (read-only)](#отслеживание-read-only)
 - [Архитектура БД](#архитектура-бд)
 - [Массовая вставка](Bulk/Readme-ru.md)
 - [Требования](#требования)
@@ -234,6 +235,140 @@ scope** — транзакция всегда передаётся явным а
 
 `Error`/`Error5xx` и `ErrorMaxAttempts` дополнительно передаются в `IPgOutboxPoisonHandler` до
 записи статуса; см. [Обработчик «ядовитых» сообщений](Setup/Readme-ru.md#5-обработчик-ядовитых-сообщений-permanent-failures).
+
+---
+
+## Отслеживание (read-only)
+
+`IPgOutboxMessageTracker` отвечает на вопрос «что случилось с сообщением, которое я опубликовал»,
+без ручного SQL. Провайдер регистрирует его сам — по ключу outbox-скоупа, плюс без ключа для
+дефолтного:
+
+```csharp
+IPgOutboxMessageTracker tracker = serviceProvider.GetRequiredService<IPgOutboxMessageTracker>();
+
+IReadOnlyList<PgOutboxMessageTrace> traces = await tracker.GetAsync(
+    payloadId: orderId,
+    tenantId: 1,
+    part: "orders",                                  // необязательное сужение партиции
+    fromDate: DateTimeOffset.UtcNow.AddDays(-2),     // окно по умолчанию — 7 дней
+    cancellationToken: ct);
+
+foreach (PgOutboxMessageTrace trace in traces)
+{
+    Console.WriteLine($"{trace.MessageId} seq={trace.MsgSeq} loaded={trace.IsLoaded}");
+
+    foreach (PgOutboxDeliveryState delivery in trace.Deliveries)   // по одной на consumer group
+    {
+        Console.WriteLine(
+            $"  {delivery.ConsumerGroup}: {delivery.StatusCode} attempt={delivery.Attempt} " +
+            $"terminal={delivery.IsTerminal} stuck={delivery.IsStuck} " +
+            $"error={delivery.ErrorType}: {delivery.ErrorMessage}");
+    }
+}
+
+// История попыток (только завершённые доставки) из __log$:
+IReadOnlyList<PgOutboxDeliveryAttempt> history = await tracker.GetHistoryAsync(
+    payloadId: orderId, tenantId: 1, consumerGroup: "orders_group");
+```
+
+Что означает результат:
+
+| Поле | Смысл |
+|---|---|
+| `Deliveries` пуст | сообщение сохранено, но ни одна группа его ещё не забирала — это **не** `Pending` |
+| `StatusCode` + `StatusMessage` | последний статус от потребителя (`Pending` = загружено, но не арендовано) |
+| `Attempt` | `delivery_attempt`; `Postpone` намеренно его не увеличивает |
+| `LockExpiresOn` | когда задача снова станет доступна; `null` — аренды ещё не было |
+| `IsStuck` | `Processing` с истёкшей арендой — упавший воркер, а не ошибка |
+| `IsTerminal` | без ручного перезапуска доставки больше не будет |
+| `ErrorType` / `ErrorMessage` | строка `__error$`; `Warn` её не пишет |
+| `GetHistoryAsync` | все завершённые попытки, от старых к новым — единственный взгляд «как менялось» |
+
+Для страницы сообщений, здоровья очереди и саппорта:
+
+```csharp
+IReadOnlyList<PgOutboxMessageTrace> page = await tracker.GetManyAsync(orderIds, tenantId: 1, ct);
+IReadOnlyList<PgOutboxStatusCount> counts = await tracker.CountAsync(
+    tenantId: 1, consumerGroup: "orders_group", ct);
+PgOutboxMessagePayload? stored = await tracker.GetPayloadAsync(trace.MessageId, tenantId: 1, ct);
+```
+
+`GetManyAsync` — та же проекция с `msg_payload_id = ANY(@ids)`, пустые id отбрасываются, дубли
+схлопываются. `CountAsync` отдаёт по строке на `(group, status)` с `Count` и `Stuck` (`Processing` с
+истёкшей арендой) — ровно то, что нужно health-метрике, без чтения payload'ов. `GetPayloadAsync`
+возвращает сохранённые байты, размер и имя типа из `__type$`; десериализуйте тем же
+`IOutboxMessageSerializer`, что и провайдер.
+
+`SearchAsync` — запрос для дашборда. Его единица — **task**, а не сообщение: статус, попытки и аренда
+принадлежат одной consumer group. Пагинация keyset, поэтому глубокая страница стоит столько же,
+сколько первая:
+
+```csharp
+IReadOnlyList<PgOutboxTaskEntry> failing = await tracker.SearchAsync(new PgOutboxTaskQuery
+{
+    TenantId = 1,
+    ConsumerGroup = "orders_group",
+    Statuses = [DeliveryStatusCode.Error501, DeliveryStatusCode.MaximumAttemptsError],
+    Limit = 100,
+}, ct);
+
+// Следующая страница: курсор последней записи, а не offset.
+if (failing.Count > 0)
+{
+    var next = await tracker.SearchAsync(new PgOutboxTaskQuery
+    {
+        TenantId = 1, ConsumerGroup = "orders_group", After = failing[^1].Cursor,
+    }, ct);
+}
+```
+
+Пустой набор `Statuses` не совпадает ни с чем. Сортировка идёт по `msg_seq`, индекса на который в
+task-таблице нет — на больших очередях сочетайте фильтр по группе/статусу с узким окном.
+
+`trace.Stage` — задокументированный worst-of по группам, которые загрузили сообщение: `Failed`,
+если хоть одна группа закончила неустранимой ошибкой; иначе `InFlight`, если у какой-то группы ещё
+есть запланированная работа; иначе `Settled`; `NotLoaded`, если никто ещё не забрал. Группы, которые
+сообщение **не** загружали, в нём не видны — сверяйте с реестром хранилища:
+
+```csharp
+IReadOnlyList<PgOutboxConsumerGroup> groups = await tracker.GetConsumerGroupsAsync(tenantId: 1, ct);
+IReadOnlyList<string> missing = trace.GetMissingGroups(groups.Select(g => g.ConsumerGroup));
+```
+
+`__offset$.group_offset_seq` показывает, докуда каждая группа дочитала: если `msg_seq` сообщения
+больше offset группы, этой группе сообщение ещё даже не передавалось. У зарегистрированной, но так
+и не запущенной группы строки offset нет вовсе.
+
+### Requeue
+
+`IPgOutboxMessageMaintenance` (регистрируется рядом с трекером) сбрасывает завершённую доставку, чтобы
+группа доставила сообщение снова:
+
+```csharp
+int reset = await maintenance.RequeueAsync(
+    payloadId: orderId, tenantId: 1, consumerGroup: "orders_group");
+
+int resetById = await maintenance.RequeueByMessageIdAsync(trace.MessageId, tenantId: 1);
+```
+
+`PgOutboxPoisonMessage.TaskId`, который уже есть у poison-хендлера, — самый частый кандидат:
+
+```csharp
+int resetByTask = await maintenance.RequeueTaskAsync(poison.TaskId, tenantId: 1);
+```
+
+Сбрасываются только завершённые задачи: `Pending`/`Processing`/`Postpone`/`Retry`/`Warn` ещё
+принадлежат конвейеру доставки, поэтому requeue не отбирает живую аренду и не отменяет
+запланированный повтор. Курсор группы не трогается (строка задачи уже существует), а сам requeue
+работает только в пределах lookback группы — по умолчанию семь дней. Доставка остаётся
+at-least-once: потребитель увидит сообщение снова и должен быть идемпотентным.
+
+Оговорки: `msg_payload_id` **не уникален**, поэтому результат — список; порядок доставки задаёт
+`msg_seq`, а не v7-id; строки старше `DropPartsAfterRetention` (по умолчанию 30 дней) исчезают
+вместе с партициями; публикация внутри транзакции вызывающего не видна трекеру до её COMMIT; а
+`msg_payload_id` не индексирован, поэтому поиск сканирует подходящие дневные листья — для больших
+таблиц сужайте `part`/`fromDate`.
 
 ---
 
