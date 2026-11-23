@@ -8,7 +8,11 @@ public sealed record AudioSeparationOptions
     /// <summary>Path of the input WAV file.</summary>
     public required string InputPath { get; init; }
 
-    /// <summary>Output path; defaults to the input path next to an <c>.echo</c> suffix.</summary>
+    /// <summary>
+    /// Output path. When omitted, the file is written next to the input as
+    /// <c>&lt;name&gt;_linear.wav</c> or <c>&lt;name&gt;_aggressive.wav</c>, depending on
+    /// <see cref="Processing"/>. It must not point at the input file itself.
+    /// </summary>
     public string? OutputPath { get; init; }
 
     /// <summary>Separation mode.</summary>

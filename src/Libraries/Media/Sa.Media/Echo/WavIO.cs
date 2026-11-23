@@ -27,11 +27,13 @@ internal static class WavIO
 
         // data size == 0xFFFFFFFF (потоковая запись) раньше давал (int)(uint.MaxValue / 4)
         // кадров и рент на ~8 ГБ; для файла >2 ГиБ — переполнение frameCount * 2.
+        // BlockAlign (байт на кадр), а не зашитое 4: для 24-bit/float входа оценка была
+        // завышена, и файл, который помещается в память, отвергался как «слишком длинный».
         long dataSize = header.ResolveDataSize(new FileInfo(path).Length);
         if (dataSize <= 0)
             throw new InvalidDataException($"Cannot determine the size of the WAV data in '{path}'.");
 
-        long frameCount = dataSize / 4;
+        long frameCount = dataSize / header.BlockAlign;
         if (frameCount > MaxInMemoryFrames)
         {
             throw new NotSupportedException(

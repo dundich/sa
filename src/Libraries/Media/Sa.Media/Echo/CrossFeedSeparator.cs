@@ -42,6 +42,9 @@ public static class CrossFeedSeparator
     /// </summary>
     /// <param name="options">The separation options.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <exception cref="ArgumentException">
+    /// <see cref="AudioSeparationOptions.OutputPath"/> points at the input file itself.
+    /// </exception>
     public static async Task ExecuteAsync(AudioSeparationOptions options, CancellationToken cancellationToken = default)
     {
         // Аргументы проверяем до обращения к файловой системе: неверные опции должны падать
@@ -70,6 +73,12 @@ public static class CrossFeedSeparator
         string inputDirectory = Path.GetDirectoryName(inputPath) ?? Directory.GetCurrentDirectory();
         string outputPath = Path.GetFullPath(options.OutputPath
             ?? Path.Combine(inputDirectory, $"{Path.GetFileNameWithoutExtension(inputPath)}_{modeName}.wav"));
+
+        // Проверяем до создания каталога и до любого чтения: выход, совпадающий с входом,
+        // в потоковых режимах открывается на запись (FileMode.Create) до конца первого прохода
+        // и обрезает запись, которую ещё читает InvertWithGainAsync. Наблюдаемый результат —
+        // IOException «file is being used by another process» и вход, урезанный до заголовка.
+        EnsureNotSameFile(inputPath, outputPath);
 
         var outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(outputDirectory)) Directory.CreateDirectory(outputDirectory);
@@ -100,6 +109,27 @@ public static class CrossFeedSeparator
         }
     }
 
+    /// <summary>
+    /// Вход и выход обязаны быть разными файлами: потоковые режимы открывают выход на запись
+    /// (<see cref="FileMode.Create"/>) ещё до того, как дочитан вход, поэтому «выход поверх входа»
+    /// уничтожает запись, а не разделяет её. Сравнение учитывает регистр только там, где его
+    /// учитывает файловая система: на Linux <c>A.wav</c> и <c>a.wav</c> — разные файлы.
+    /// </summary>
+    private static void EnsureNotSameFile(string inputPath, string outputPath)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+
+        if (!string.Equals(inputPath, outputPath, comparison))
+            return;
+
+        throw new ArgumentException(
+            $"{nameof(AudioSeparationOptions)}.{nameof(AudioSeparationOptions.OutputPath)} must point at a " +
+            $"different file: input and output are both '{inputPath}'. The streaming modes create the " +
+            "output before the input is fully read, so the recording would be truncated mid-pass.");
+    }
+
     private static ProcessingMode ResolveMode(ProcessingMode mode, HeadInfo head)
     {
         if (mode != ProcessingMode.Auto) return mode;
@@ -127,7 +157,9 @@ public static class CrossFeedSeparator
 
         // Для потоковых записей (data size == 0xFFFFFFFF) реальный размер берём из файла,
         // иначе TotalFrames = 1_073_741_823 и выбор режима/буферы уезжают в космос.
-        long totalFrames = wavHeader.ResolveDataSize(new FileInfo(path).Length) / 4;
+        // Делим на BlockAlign (байт на кадр), а не на зашитое 4: для 24-bit/float входа
+        // «4 байта на стерео-кадр» завышало оценку в 1.5–2 раза.
+        long totalFrames = wavHeader.ResolveDataSize(new FileInfo(path).Length) / wavHeader.BlockAlign;
         int frameSize = Math.Max(1, (int)Math.Round(sampleRate * 0.1));
         int frameCount = (int)Math.Min((long)int.MaxValue, totalFrames / frameSize);
         return new HeadInfo(frameSize, frameCount, sampleRate, totalFrames);
@@ -139,7 +171,7 @@ public static class CrossFeedSeparator
         await using AsyncWavReader reader = AsyncWavReader.CreateFromFile(path);
         WavHeader wavHeader = await reader.GetHeaderAsync(cancellationToken);
         int sampleRate = (int)wavHeader.SampleRate;
-        long totalFrames = wavHeader.ResolveDataSize() / 4;
+        long totalFrames = wavHeader.ResolveDataSize() / wavHeader.BlockAlign;
         int frameSize = Math.Max(1, (int)Math.Round(sampleRate * 0.1));
         int frameCount = (int)Math.Min((long)int.MaxValue, totalFrames / frameSize);
         if (frameCount == 0) throw new InvalidOperationException("Recording is too short to analyze");
