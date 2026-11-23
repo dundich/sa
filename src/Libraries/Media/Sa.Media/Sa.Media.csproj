@@ -5,10 +5,6 @@
         <PackageTags>audio wav pcm</PackageTags>
     </PropertyGroup>
 
-    <PropertyGroup>
-        <NoWarn>S3776</NoWarn>
-    </PropertyGroup>
-
     <ItemGroup>
         <InternalsVisibleTo Include="Sa.MediaTests" />
     </ItemGroup>

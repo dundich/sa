@@ -68,11 +68,7 @@ public static class TimeRangeExtensions
     /// <param name="gapMilliseconds">An additional gap to preserve between neighbouring ranges.</param>
     /// <returns>The expanded chunks, preserving the original chunk layout.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-#pragma warning disable S3776
-#pragma warning disable S2368
     public static TimeRange[][] ExpandTimeRanges(
-#pragma warning restore S2368
-#pragma warning restore S3776
         TimeRange[][] chunks,
         int thresholdMilliseconds = 300,
         int gapMilliseconds = 0)
