@@ -1,5 +1,5 @@
-using System.IO.Pipelines;
 using Sa.Media;
+using System.IO.Pipelines;
 
 namespace Sa.MediaTests;
 
@@ -171,6 +171,31 @@ public sealed class ReadChannelChunksTests
         Assert.All(values, value => Assert.Equal(258 / 32768f, value, 1e-6));
     }
 
+    // TC-1.8 | F-11
+    [Fact]
+    public async Task EmptyDataChunk_YieldsNoSamplesAndDoesNotReadFollowingChunks()
+    {
+        // Явно объявленный data size = 0 — это пустая запись, а не «размер неизвестен».
+        // Раньше оба случая попадали в long.MaxValue, и байты следующего LIST-чанка
+        // уходили в результат как аудио.
+        byte[] wav = BuildWav(frames: 0, junkSize: 0, extraDataBytes: 0, trailingChunkBytes: 8);
+
+        using AsyncWavReader reader = CreateReader(wav, bufferSize: 4096);
+        WavHeader header = await reader.GetHeaderAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(header.HasDataSize);
+        Assert.Equal(0u, header.DataSize);
+
+        List<AudioChunk> chunks = [];
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(channel: 0, samplesPerBatch: Batch, cancellationToken: TestContext.Current.CancellationToken))
+        {
+            chunks.Add(chunk);
+        }
+
+        Assert.Empty(chunks);
+    }
+
     private static AsyncWavReader CreateReader(byte[] wav, int bufferSize)
         => AsyncWavReader.Create(
             new MemoryStream(wav),
@@ -181,7 +206,8 @@ public sealed class ReadChannelChunksTests
         int junkSize,
         int extraDataBytes,
         short left = 1234,
-        short right = 5678)
+        short right = 5678,
+        int trailingChunkBytes = 0)
     {
         int dataSize = frames * 4 + extraDataBytes;
 
@@ -218,6 +244,15 @@ public sealed class ReadChannelChunksTests
         }
 
         writer.Write(new byte[extraDataBytes]);
+
+        if (trailingChunkBytes > 0)
+        {
+            // Метаданные после data: если размер data объявлен честно, эти байты аудио не являются.
+            writer.Write("LIST"u8.ToArray());
+            writer.Write((uint)trailingChunkBytes);
+            writer.Write(new byte[trailingChunkBytes]);
+        }
+
         writer.Flush();
 
         // RIFF size = file size - 8

@@ -140,6 +140,14 @@ public sealed class TimeRangeExtensionsTests
         Assert.Empty(actual[1]);
     }
 
+    [Fact]
+    public void ExpandTimeRanges_NoChunks_ReturnsTheSameArray()
+    {
+        TimeRange[][] input = [];
+
+        Assert.Same(input, TimeRangeExtensions.ExpandTimeRanges(input));
+    }
+
 
 
 
@@ -373,5 +381,103 @@ public sealed class TimeRangeExtensionsTests
         var expected = ToChunks([Ms(0, 4500)]);
 
         AssertChunksEqual(expected, actual);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Соседние публичные хелперы: Contains / Sort / Merge
+    // ─────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(1000, true)]      // начало — включительно
+    [InlineData(1500, true)]
+    [InlineData(2000, true)]      // конец — включительно
+    [InlineData(999, false)]
+    [InlineData(2001, false)]
+    public void Contains_TimeSpan_IsInclusive(double milliseconds, bool expected)
+    {
+        TimeRange range = Ms(1000, 2000);
+
+        Assert.Equal(expected, range.Contains(TimeSpan.FromMilliseconds(milliseconds)));
+    }
+
+    [Theory]
+    [InlineData(1000L, true)]
+    [InlineData(2000L, true)]
+    [InlineData(2001L, false)]
+    public void Contains_LongMilliseconds_IsInclusive(long milliseconds, bool expected)
+        => Assert.Equal(expected, Ms(1000, 2000).Contains(milliseconds));
+
+    [Theory]
+    [InlineData(1000.0, true)]
+    [InlineData(2000.0, true)]
+    [InlineData(2000.5, false)]
+    public void Contains_DoubleMilliseconds_IsInclusive(double milliseconds, bool expected)
+        => Assert.Equal(expected, Ms(1000, 2000).Contains(milliseconds));
+
+    [Fact]
+    public void Contains_OpenEndedRange_ContainsAnythingAfterTheStart()
+    {
+        TimeRange range = Ms(500, long.MaxValue);
+
+        Assert.False(range.Contains(499L));
+        Assert.True(range.Contains(500L));
+        // Верхняя граница — TimeSpan.MaxValue, а не long.MaxValue: миллисекунды больше
+        // 9.2e14 в TimeSpan не помещаются и в диапазон не входят.
+        Assert.True(range.Contains((long)(TimeSpan.MaxValue.TotalMilliseconds / 2)));
+    }
+
+    [Fact]
+    public void Sort_OrdersByStartKeepingTheRangesIntact()
+    {
+        TimeRange[] ranges = [Ms(3000, 3100), Ms(1000, 1500), Ms(2000, 2500)];
+
+        ranges.AsSpan().Sort();
+
+        double[] starts = [.. ranges.Select(r => r.From.TotalMilliseconds)];
+        double[] ends = [.. ranges.Select(r => r.To.TotalMilliseconds)];
+
+        Assert.Equal([1000.0, 2000.0, 3000.0], starts);
+        Assert.Equal([1500.0, 2500.0, 3100.0], ends);
+    }
+
+    [Fact]
+    public void Merge_JoinsRangesCloserThanTheThreshold()
+    {
+        TimeRange[] ranges = [Ms(0, 1000), Ms(1100, 2000), Ms(5000, 6000)];
+
+        IReadOnlyCollection<TimeRange> merged = ranges.Merge(thresholdMilliseconds: 300);
+
+        TimeRange[] expected = [Ms(0, 2000), Ms(5000, 6000)];
+        Assert.Equal(expected, merged);
+    }
+
+    [Fact]
+    public void Merge_UnsortedInput_IsSortedFirst()
+    {
+        TimeRange[] ranges = [Ms(5000, 6000), Ms(0, 1000)];
+
+        IReadOnlyCollection<TimeRange> merged = ranges.Merge(thresholdMilliseconds: 300);
+
+        TimeRange[] expected = [Ms(0, 1000), Ms(5000, 6000)];
+        Assert.Equal(expected, merged);
+    }
+
+    [Fact]
+    public void Merge_OverlappingRanges_TakesTheWidestEnd()
+    {
+        TimeRange[] ranges = [Ms(0, 1000), Ms(500, 3000)];
+
+        IReadOnlyCollection<TimeRange> merged = ranges.Merge(thresholdMilliseconds: 0);
+
+        TimeRange[] expected = [Ms(0, 3000)];
+        Assert.Equal(expected, merged);
+    }
+
+    [Fact]
+    public void Merge_SingleRange_IsReturnedAsIs()
+    {
+        TimeRange[] ranges = [Ms(1000, 2000)];
+
+        Assert.Equal(ranges, ranges.Merge());
     }
 }

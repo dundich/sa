@@ -150,10 +150,34 @@ public sealed class SampleConverterTests
     }
 
     [Fact]
-    public void FloatConverter_UnsupportedFormat_Throws()
+    public void GetNormalizedFloatConverter_UnsupportedFormat_Throws()
     {
         Assert.Throws<NotSupportedException>(
             () => SampleConverter.GetNormalizedFloatConverter(64, WaveFormatType.Pcm));
+    }
+
+    [Theory]
+    [InlineData(64, WaveFormatType.Pcm)]
+    [InlineData(8, WaveFormatType.IeeeFloat)]
+    [InlineData(16, WaveFormatType.Adpcm)]
+    public void GetNormalizedConverter_UnsupportedFormat_Throws(ushort bitsPerSample, WaveFormatType format)
+    {
+        Assert.Throws<NotSupportedException>(
+            () => SampleConverter.GetNormalizedConverter(bitsPerSample, format));
+    }
+
+    [Fact]
+    public void GetNormalizedConverter_UnknownEncoding_Throws()
+    {
+        Assert.Throws<NotSupportedException>(
+            () => SampleConverter.GetNormalizedConverter((AudioEncoding)99));
+    }
+
+    [Fact]
+    public void GetConverter_UnknownEncoding_Throws()
+    {
+        Assert.Throws<NotSupportedException>(
+            () => SampleConverter.GetConverter((AudioEncoding)99));
     }
 
     private static double Tolerance(AudioEncoding encoding) => encoding switch
