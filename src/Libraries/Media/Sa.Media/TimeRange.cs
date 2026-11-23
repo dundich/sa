@@ -42,14 +42,6 @@ public sealed record TimeRange
 
 
     /// <summary>
-    /// Packs the given ranges into a jagged array.
-    /// </summary>
-    /// <param name="chunks">The ranges to pack.</param>
-    /// <returns>The same arrays, unchanged.</returns>
-    public static TimeRange[][] ToChunks(params TimeRange[][] chunks) => chunks;
-
-
-    /// <summary>
     /// A range covering everything from the start of time to its end.
     /// </summary>
     public static readonly TimeRange Default

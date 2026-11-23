@@ -60,6 +60,7 @@ Sa.Media.AsyncWavReader.ReadChannelChunksAsync(int channel, int samplesPerBatch,
 *REMOVED*Sa.Media.AsyncWavReader.ReadFloatSamplesAsync(Sa.Media.TimeRange? cutRange = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioFloatPacket>!
 *REMOVED*Sa.Media.AsyncWavReader.ConvertToFormatAsync(Sa.Media.AudioEncoding targetFormat = Sa.Media.AudioEncoding.Pcm16BitSigned, Sa.Media.TimeRange? cutRange = null, bool allowBufferReuse = true, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioPacket>!
 *REMOVED*Sa.Media.AsyncWavReader.ReadStreamableChunksAsync(Sa.Media.AudioEncoding targetFormat = Sa.Media.AudioEncoding.Pcm16BitSigned, Sa.Media.TimeRange? cutRange = null, int samplesPerBatch = 1024, bool allowBufferReuse = true, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioPacket>!
+*REMOVED*static Sa.Media.TimeRange.ToChunks(params Sa.Media.TimeRange![]![]! chunks) -> Sa.Media.TimeRange![]![]!
 *REMOVED*~override Sa.Media.AudioFloatPacket.ToString() -> string
 *REMOVED*static Sa.Media.AudioFloatPacket.operator !=(Sa.Media.AudioFloatPacket left, Sa.Media.AudioFloatPacket right) -> bool
 *REMOVED*static Sa.Media.AudioFloatPacket.operator ==(Sa.Media.AudioFloatPacket left, Sa.Media.AudioFloatPacket right) -> bool
