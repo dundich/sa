@@ -54,49 +54,49 @@
 using Sa.Media.FFmpeg;
 
 // Извлечение метаданных
-var meta = await IFFProbeExecutor.Default.GetMetaInfo("input.mp3");
+var meta = await IFFProbeExecutor.Default.GetMetaInfoAsync("input.mp3");
 Console.WriteLine($"Duration: {meta.Duration}s, Format: {meta.FormatName}");
 
 // Получение каналов и частоты отдельно
-var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate("input.mp3");
+var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync("input.mp3");
 
 // Конвертация аудио
-await IFFMpegExecutor.Default.ConvertToPcmS16Le(
+await IFFMpegExecutor.Default.ConvertToPcmS16LeAsync(
     "input.mp3",
     "output.wav",
     outputSampleRate: 16000,
     outputChannelCount: 1);
 
 // PCM S32 LE WAV конвертация
-await IFFMpegExecutor.Default.ConvertToPcmS32Le(
+await IFFMpegExecutor.Default.ConvertToPcmS32LeAsync(
     "input.mp3",
     "output_s32le.wav",
     outputSampleRate: 48000,
     outputChannelCount: 2);
 
 // Сырой float32 LE бинарник
-await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
+await IFFMpegExecutor.Default.ConvertToPcmF32LeRawAsync(
     "input.mp3",
     "output_raw.f32le",
     outputSampleRate: 48000,
     outputChannelCount: 2);
 
 // Конвертация с сохранением исходного формата
-await IFFMpegExecutor.Default.ConvertToPcmS16LePreservingFormat(
+await IFFMpegExecutor.Default.ConvertToPcmS16LePreservingFormatAsync(
     "input.mp3",
     "output_preserved.wav");
 
 // Сырой PCM S16 LE бинарник (без WAV-заголовка)
-await IFFMpegExecutor.Default.ConvertToPcmS16LeRaw(
+await IFFMpegExecutor.Default.ConvertToPcmS16LeRawAsync(
     "input.mp3",
     "output_raw.s16le",
     outputSampleRate: 16000,
     outputChannelCount: 1);
 
 // Получение версии FFmpeg / форматов / кодеков
-var version = await IFFMpegExecutor.Default.GetVersion();
-var formats = await IFFMpegExecutor.Default.GetFormats();
-var codecs  = await IFFMpegExecutor.Default.GetCodecs();
+var version = await IFFMpegExecutor.Default.GetVersionAsync();
+var formats = await IFFMpegExecutor.Default.GetFormatsAsync();
+var codecs  = await IFFMpegExecutor.Default.GetCodecsAsync();
 ```
 
 ### Разделение каналов (стерео → монофайлы)
@@ -136,7 +136,7 @@ var joined = await merger.JoinAsync(
 ```csharp
 await using var inputStream = File.OpenRead("input.mp3");
 
-await IFFMpegExecutor.Default.ConvertToPcmS16Le(
+await IFFMpegExecutor.Default.ConvertToPcmS16LeAsync(
     inputStream,
     inputFormat: "mp3",
     onOutput: async (stream, ct) =>
@@ -157,7 +157,7 @@ await IFFMpegExecutor.Default.ConvertToPcmS16Le(
 ```csharp
 await using var inputStream = File.OpenRead("input.mp3");
 
-await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
+await IFFMpegExecutor.Default.ConvertToPcmF32LeRawAsync(
     inputStream,
     inputFormat: "mp3",
     onOutput: async (rawStream, ct) =>
@@ -249,15 +249,15 @@ builder.Services.AddSaFFMpeg(b => b.FromConfiguration("Ffmpeg"));
 
 | Источник | Целевой | Метод | Примечание |
 |----------|---------|-------|-----------|
-| Любой, поддерживаемый FFmpeg | **PCM S16 LE WAV** | `ConvertToPcmS16Le()` | Настраиваемая частота (по умолч. 16 кГц), кол-во каналов |
-| Любой | **PCM S16 LE WAV** | `ConvertToPcmS16LePreservingFormat()` | Сохраняет исходную частоту и каналы |
-| Любой | **Сырой PCM S16 LE бинарник** | `ConvertToPcmS16LeRaw()` | Без WAV-заголовка, настраиваемая частота/каналы |
-| Любой | **PCM S32 LE WAV** | `ConvertToPcmS32Le()` | 32-bit signed integer, настраиваемая частота/каналы |
-| Любой | **PCM F32 LE WAV** | `ConvertToPcmF32Le()` | 32-bit IEEE float, настраиваемая частота/каналы |
-| Любой | **Сырой PCM F32 LE бинарник** | `ConvertToPcmF32LeRaw()` | 32-bit IEEE float, без WAV-заголовка |
-| Любой | **MP3** | `ConvertToMp3()` | 16 кГц, 128 kbps, libmp3lame |
-| Любой | **OGG Vorbis** | `ConvertToOgg(isLibopus: false)` | Стандартный Vorbis |
-| Любой | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Кодек Opus |
+| Любой, поддерживаемый FFmpeg | **PCM S16 LE WAV** | `ConvertToPcmS16LeAsync()` | Настраиваемая частота (по умолч. 16 кГц), кол-во каналов |
+| Любой | **PCM S16 LE WAV** | `ConvertToPcmS16LePreservingFormatAsync()` | Сохраняет исходную частоту и каналы |
+| Любой | **Сырой PCM S16 LE бинарник** | `ConvertToPcmS16LeRawAsync()` | Без WAV-заголовка, настраиваемая частота/каналы |
+| Любой | **PCM S32 LE WAV** | `ConvertToPcmS32LeAsync()` | 32-bit signed integer, настраиваемая частота/каналы |
+| Любой | **PCM F32 LE WAV** | `ConvertToPcmF32LeAsync()` | 32-bit IEEE float, настраиваемая частота/каналы |
+| Любой | **Сырой PCM F32 LE бинарник** | `ConvertToPcmF32LeRawAsync()` | 32-bit IEEE float, без WAV-заголовка |
+| Любой | **MP3** | `ConvertToMp3Async()` | 16 кГц, 128 kbps, libmp3lame |
+| Любой | **OGG Vorbis** | `ConvertToOggAsync(isLibopus: false)` | Стандартный Vorbis |
+| Любой | **OGG Opus** | `ConvertToOggAsync(isLibopus: true)` | Кодек Opus |
 
 ---
 
@@ -283,20 +283,20 @@ builder.Services.AddSaFFMpeg(b => b.FromConfiguration("Ffmpeg"));
 |----------------|---------|----------|
 | `Default` | `IFFMpegExecutor` | Статический дефолтный экземпляр (использует встроенный бинарник) |
 | `Executor` | `IFFRawExecutor` | Внутренний низкоуровневый процессор |
-| `GetVersion()` | `Task<string>` | Строка версии FFmpeg |
-| `GetFormats()` | `Task<string>` | Все поддерживаемые форматы |
-| `GetCodecs()` | `Task<string>` | Все поддерживаемые кодеки |
-| `ConvertToPcmS16Le(file, file, ...)` | `Task<string>` | Конвертация в WAV-файл |
-| `ConvertToPcmS16Le(stream, func, ...)` | `Task` | Потоковая конвертация |
-| `ConvertToPcmS16LePreservingFormat(file, file, ...)` | `Task<string>` | Конвертация с сохранением формата |
-| `ConvertToPcmS16LeRaw(file, file, ...)` | `Task<string>` | Конвертация в сырой s16le бинарный файл |
-| `ConvertToPcmS16LeRaw(stream, func, ...)` | `Task` | Потоковая конвертация в сырой s16le |
-| `ConvertToPcmS32Le(file, file, ...)` | `Task<string>` | Конвертация в WAV (PCM S32 LE) |
-| `ConvertToPcmF32Le(file, file, ...)` | `Task<string>` | Конвертация в WAV (PCM F32 LE) |
-| `ConvertToPcmF32LeRaw(file, file, ...)` | `Task<string>` | Конвертация в сырой f32le бинарный файл |
-| `ConvertToPcmF32LeRaw(stream, func, ...)` | `Task` | Потоковая конвертация в сырой f32le |
-| `ConvertToMp3(file, file, ...)` | `Task<string>` | Конвертация в MP3 |
-| `ConvertToOgg(file, file, ...)` | `Task<string>` | Конвертация в OGG (Vorbis или Opus) |
+| `GetVersionAsync()` | `Task<string>` | Строка версии FFmpeg |
+| `GetFormatsAsync()` | `Task<string>` | Все поддерживаемые форматы |
+| `GetCodecsAsync()` | `Task<string>` | Все поддерживаемые кодеки |
+| `ConvertToPcmS16LeAsync(file, file, ...)` | `Task<string>` | Конвертация в WAV-файл |
+| `ConvertToPcmS16LeAsync(stream, func, ...)` | `Task` | Потоковая конвертация |
+| `ConvertToPcmS16LePreservingFormatAsync(file, file, ...)` | `Task<string>` | Конвертация с сохранением формата |
+| `ConvertToPcmS16LeRawAsync(file, file, ...)` | `Task<string>` | Конвертация в сырой s16le бинарный файл |
+| `ConvertToPcmS16LeRawAsync(stream, func, ...)` | `Task` | Потоковая конвертация в сырой s16le |
+| `ConvertToPcmS32LeAsync(file, file, ...)` | `Task<string>` | Конвертация в WAV (PCM S32 LE) |
+| `ConvertToPcmF32LeAsync(file, file, ...)` | `Task<string>` | Конвертация в WAV (PCM F32 LE) |
+| `ConvertToPcmF32LeRawAsync(file, file, ...)` | `Task<string>` | Конвертация в сырой f32le бинарный файл |
+| `ConvertToPcmF32LeRawAsync(stream, func, ...)` | `Task` | Потоковая конвертация в сырой f32le |
+| `ConvertToMp3Async(file, file, ...)` | `Task<string>` | Конвертация в MP3 |
+| `ConvertToOggAsync(file, file, ...)` | `Task<string>` | Конвертация в OGG (Vorbis или Opus) |
 
 ### IFFProbeExecutor
 
@@ -304,16 +304,16 @@ builder.Services.AddSaFFMpeg(b => b.FromConfiguration("Ffmpeg"));
 |----------------|---------|----------|
 | `Default` | `IFFProbeExecutor` | Статический дефолтный экземпляр |
 | `Executor` | `IFFRawExecutor` | Внутренний низкоуровневый процессор |
-| `GetChannelsAndSampleRate()` | `Task<(int?, int?)>` | Сырая пара канал/частота |
-| `GetMetaInfo(file)` | `Task<MediaMetadata>` | Полные метаданные из пути к файлу |
-| `GetMetaInfo(stream, format)` | `Task<MediaMetadata>` | Полные метаданные из потока |
+| `GetChannelsAndSampleRateAsync()` | `Task<(int?, int?)>` | Сырая пара канал/частота |
+| `GetMetaInfoAsync(file)` | `Task<MediaMetadata>` | Полные метаданные из пути к файлу |
+| `GetMetaInfoAsync(stream, format)` | `Task<MediaMetadata>` | Полные метаданные из потока |
 
 ### IPcmS16LeChannelManipulator
 
 | Метод | Возврат | Описание |
 |-------|---------|----------|
-| `SplitAsync(input, output, ...)` | `Task<IReadOnlyList<string>>` | Разделить стерео → несколько моно WAV |
-| `JoinAsync(left, right, output, ...)` | `Task<string>` | Объединить два моно → стерео WAV |
+| `SplitAsync(input, output, ...)` | `Task<IReadOnlyList<string>>` | Разбивает стерео на отдельные моно-WAV (имена: `{base}_channel_{N}.{ext}`); имя без каталога разрешается относительно `WritableDirectory`, возвращаются реально записанные пути |
+| `JoinAsync(left, right, output, ...)` | `Task<string>` | Собирает два моно в стерео-WAV; разрешение выходного имени такое же, как у `SplitAsync` |
 
 ### IFFRawExecutor
 
@@ -381,7 +381,7 @@ public record ProcessExecutionResult(
 readelf -d sa/native/ffmpeg | grep NEEDED   # вывода быть не должно
 ```
 
-⚠️ **Фолбэка с нерабочего бандла нет.** Поиск берёт первый *существующий* файл, поэтому если `sa/native/ffmpeg` есть, но не запускается, системный FFmpeg не пробуется — чините бандл или задайте `FFMpegOptions.ExecutablePath`. Причина при этом не теряется: `GetVersion()`, `GetFormats()` и `GetCodecs()` бросают `ProcessExecutionResultException` с кодом возврата и хвостом stderr.
+⚠️ **Фолбэка с нерабочего бандла нет.** Поиск берёт первый *существующий* файл, поэтому если `sa/native/ffmpeg` есть, но не запускается, системный FFmpeg не пробуется — чините бандл или задайте `FFMpegOptions.ExecutablePath`. Причина при этом не теряется: `GetVersionAsync()`, `GetFormatsAsync()` и `GetCodecsAsync()` бросают `ProcessExecutionResultException` с кодом возврата и хвостом stderr.
 
 **Порядок поиска:**
 1. `AppContext.BaseDirectory/ffmpeg`

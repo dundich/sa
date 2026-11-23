@@ -62,67 +62,67 @@ dotnet add package Sa.Media.FFmpeg
 using Sa.Media.FFmpeg;
 
 // Metadata extraction
-var meta = await IFFProbeExecutor.Default.GetMetaInfo("input.mp3");
+var meta = await IFFProbeExecutor.Default.GetMetaInfoAsync("input.mp3");
 Console.WriteLine($"Duration: {meta.Duration}s, Format: {meta.FormatName}");
 
 // Get channels and sample rate separately
-var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRate("input.mp3");
+var (channels, sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync("input.mp3");
 
 // Audio conversion
-await IFFMpegExecutor.Default.ConvertToPcmS16Le(
+await IFFMpegExecutor.Default.ConvertToPcmS16LeAsync(
     "input.mp3",
     "output.wav",
     outputSampleRate: 16000,
     outputChannelCount: 1);
 
 // PCM S32 LE WAV conversion
-await IFFMpegExecutor.Default.ConvertToPcmS32Le(
+await IFFMpegExecutor.Default.ConvertToPcmS32LeAsync(
     "input.mp3",
     "output_s32le.wav",
     outputSampleRate: 48000,
     outputChannelCount: 2);
 
 // PCM F32 LE WAV conversion (float samples with WAV header)
-await IFFMpegExecutor.Default.ConvertToPcmF32Le(
+await IFFMpegExecutor.Default.ConvertToPcmF32LeAsync(
     "input.mp3",
     "output_f32le.wav",
     outputSampleRate: 48000,
     outputChannelCount: 2);
 
 // Raw float32 LE binary
-await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
+await IFFMpegExecutor.Default.ConvertToPcmF32LeRawAsync(
     "input.mp3",
     "output_raw.f32le",
     outputSampleRate: 48000,
     outputChannelCount: 2);
 
 // Raw PCM S16 LE binary (no WAV header)
-await IFFMpegExecutor.Default.ConvertToPcmS16LeRaw(
+await IFFMpegExecutor.Default.ConvertToPcmS16LeRawAsync(
     "input.mp3",
     "output_raw.s16le",
     outputSampleRate: 16000,
     outputChannelCount: 1);
 
 // Convert preserving original sample rate and channels
-await IFFMpegExecutor.Default.ConvertToPcmS16LePreservingFormat(
+await IFFMpegExecutor.Default.ConvertToPcmS16LePreservingFormatAsync(
     "input.mp3",
     "output_preserved.wav");
 
 // MP3 conversion
-await IFFMpegExecutor.Default.ConvertToMp3("input.wav", "output.mp3");
+await IFFMpegExecutor.Default.ConvertToMp3Async("input.wav", "output.mp3");
 
 // OGG Vorbis conversion
-await IFFMpegExecutor.Default.ConvertToOgg("input.wav", "output.ogg", isLibopus: false);
+await IFFMpegExecutor.Default.ConvertToOggAsync("input.wav", "output.ogg", isLibopus: false);
 
 // OGG Opus conversion
-await IFFMpegExecutor.Default.ConvertToOgg("input.wav", "output.opus", isLibopus: true);
+await IFFMpegExecutor.Default.ConvertToOggAsync("input.wav", "output.opus", isLibopus: true);
 
 // Get supported formats/codecs
-var formats = await IFFMpegExecutor.Default.GetFormats();
-var codecs  = await IFFMpegExecutor.Default.GetCodecs();
+var formats = await IFFMpegExecutor.Default.GetFormatsAsync();
+var codecs  = await IFFMpegExecutor.Default.GetCodecsAsync();
 
 // FFmpeg version
-var version = await IFFMpegExecutor.Default.GetVersion();
+var version = await IFFMpegExecutor.Default.GetVersionAsync();
 ```
 
 ### Channel split (stereo → mono files)
@@ -162,7 +162,7 @@ var joined = await merger.JoinAsync(
 ```csharp
 await using var inputStream = File.OpenRead("input.mp3");
 
-await IFFMpegExecutor.Default.ConvertToPcmS16Le(
+await IFFMpegExecutor.Default.ConvertToPcmS16LeAsync(
     inputStream,
     inputFormat: "mp3",
     onOutput: async (stream, ct) =>
@@ -183,7 +183,7 @@ await IFFMpegExecutor.Default.ConvertToPcmS16Le(
 ```csharp
 await using var inputStream = File.OpenRead("input.mp3");
 
-await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
+await IFFMpegExecutor.Default.ConvertToPcmF32LeRawAsync(
     inputStream,
     inputFormat: "mp3",
     onOutput: async (rawStream, ct) =>
@@ -206,7 +206,7 @@ await IFFMpegExecutor.Default.ConvertToPcmF32LeRaw(
 ```csharp
 await using var stream = File.OpenRead("input.mp3");
 
-var meta = await IFFProbeExecutor.Default.GetMetaInfo(stream, inputFormat: "mp3");
+var meta = await IFFProbeExecutor.Default.GetMetaInfoAsync(stream, inputFormat: "mp3");
 Console.WriteLine($"Duration: {meta.Duration}s, Bitrate: {meta.BitRate} bps");
 ```
 
@@ -285,15 +285,15 @@ same options and silently merge the settings.
 
 | Source | Target | Method | Notes |
 |--------|--------|--------|-------|
-| Any FFmpeg-supported | **PCM S16 LE WAV** | `ConvertToPcmS16Le()` | Custom sample rate (default 16 kHz), channel count |
-| Any | **PCM S16 LE WAV** | `ConvertToPcmS16LePreservingFormat()` | Preserves original sample rate & channels |
-| Any | **Raw PCM S16 LE binary** | `ConvertToPcmS16LeRaw()` | No WAV header, custom sample rate/channels |
-| Any | **PCM S32 LE WAV** | `ConvertToPcmS32Le()` | 32-bit signed integer, custom sample rate/channels |
-| Any | **PCM F32 LE WAV** | `ConvertToPcmF32Le()` | 32-bit IEEE float, custom sample rate/channels |
-| Any | **Raw PCM F32 LE binary** | `ConvertToPcmF32LeRaw()` | 32-bit IEEE float, no WAV header |
-| Any | **MP3** | `ConvertToMp3()` | 16 kHz, 128 kbps, libmp3lame |
-| Any | **OGG Vorbis** | `ConvertToOgg(isLibopus: false)` | Standard Vorbis codec |
-| Any | **OGG Opus** | `ConvertToOgg(isLibopus: true)` | Opus codec |
+| Any FFmpeg-supported | **PCM S16 LE WAV** | `ConvertToPcmS16LeAsync()` | Custom sample rate (default 16 kHz), channel count |
+| Any | **PCM S16 LE WAV** | `ConvertToPcmS16LePreservingFormatAsync()` | Preserves original sample rate & channels |
+| Any | **Raw PCM S16 LE binary** | `ConvertToPcmS16LeRawAsync()` | No WAV header, custom sample rate/channels |
+| Any | **PCM S32 LE WAV** | `ConvertToPcmS32LeAsync()` | 32-bit signed integer, custom sample rate/channels |
+| Any | **PCM F32 LE WAV** | `ConvertToPcmF32LeAsync()` | 32-bit IEEE float, custom sample rate/channels |
+| Any | **Raw PCM F32 LE binary** | `ConvertToPcmF32LeRawAsync()` | 32-bit IEEE float, no WAV header |
+| Any | **MP3** | `ConvertToMp3Async()` | 16 kHz, 128 kbps, libmp3lame |
+| Any | **OGG Vorbis** | `ConvertToOggAsync(isLibopus: false)` | Standard Vorbis codec |
+| Any | **OGG Opus** | `ConvertToOggAsync(isLibopus: true)` | Opus codec |
 
 ---
 
@@ -319,20 +319,20 @@ Options are validated at host start (`ValidateOnStart`): `TimeoutSeconds` must b
 |-----------------|---------|-------------|
 | `Default` | `IFFMpegExecutor` | Static default instance (uses bundled binary) |
 | `Executor` | `IFFRawExecutor` | Underlying raw process executor |
-| `GetVersion()` | `Task<string>` | FFmpeg version string |
-| `GetFormats()` | `Task<string>` | All supported formats |
-| `GetCodecs()` | `Task<string>` | All supported codecs |
-| `ConvertToPcmS16Le(file, file, ...)` | `Task<string>` | Convert to WAV file (PCM S16 LE) |
-| `ConvertToPcmS16Le(stream, func, ...)` | `Task` | Stream-based conversion |
-| `ConvertToPcmS16LePreservingFormat(file, file, ...)` | `Task<string>` | Convert preserving original format |
-| `ConvertToPcmS16LeRaw(file, file, ...)` | `Task<string>` | Convert to raw s16le binary file |
-| `ConvertToPcmS16LeRaw(stream, func, ...)` | `Task` | Stream-based raw s16le conversion |
-| `ConvertToPcmS32Le(file, file, ...)` | `Task<string>` | Convert to WAV file (PCM S32 LE) |
-| `ConvertToPcmF32Le(file, file, ...)` | `Task<string>` | Convert to WAV file (PCM F32 LE) |
-| `ConvertToPcmF32LeRaw(file, file, ...)` | `Task<string>` | Convert to raw f32le binary file |
-| `ConvertToPcmF32LeRaw(stream, func, ...)` | `Task` | Stream-based raw f32le conversion |
-| `ConvertToMp3(file, file, ...)` | `Task<string>` | Convert to MP3 |
-| `ConvertToOgg(file, file, ...)` | `Task<string>` | Convert to OGG (Vorbis or Opus) |
+| `GetVersionAsync()` | `Task<string>` | FFmpeg version string |
+| `GetFormatsAsync()` | `Task<string>` | All supported formats |
+| `GetCodecsAsync()` | `Task<string>` | All supported codecs |
+| `ConvertToPcmS16LeAsync(file, file, ...)` | `Task<string>` | Convert to WAV file (PCM S16 LE) |
+| `ConvertToPcmS16LeAsync(stream, func, ...)` | `Task` | Stream-based conversion |
+| `ConvertToPcmS16LePreservingFormatAsync(file, file, ...)` | `Task<string>` | Convert preserving original format |
+| `ConvertToPcmS16LeRawAsync(file, file, ...)` | `Task<string>` | Convert to raw s16le binary file |
+| `ConvertToPcmS16LeRawAsync(stream, func, ...)` | `Task` | Stream-based raw s16le conversion |
+| `ConvertToPcmS32LeAsync(file, file, ...)` | `Task<string>` | Convert to WAV file (PCM S32 LE) |
+| `ConvertToPcmF32LeAsync(file, file, ...)` | `Task<string>` | Convert to WAV file (PCM F32 LE) |
+| `ConvertToPcmF32LeRawAsync(file, file, ...)` | `Task<string>` | Convert to raw f32le binary file |
+| `ConvertToPcmF32LeRawAsync(stream, func, ...)` | `Task` | Stream-based raw f32le conversion |
+| `ConvertToMp3Async(file, file, ...)` | `Task<string>` | Convert to MP3 |
+| `ConvertToOggAsync(file, file, ...)` | `Task<string>` | Convert to OGG (Vorbis or Opus) |
 
 ### IFFProbeExecutor
 
@@ -340,16 +340,16 @@ Options are validated at host start (`ValidateOnStart`): `TimeoutSeconds` must b
 |-----------------|---------|-------------|
 | `Default` | `IFFProbeExecutor` | Static default instance |
 | `Executor` | `IFFRawExecutor` | Underlying raw process executor |
-| `GetChannelsAndSampleRate()` | `Task<(int? channels, int? sampleRate)>` | Raw channel/sample-rate pair |
-| `GetMetaInfo(file)` | `Task<MediaMetadata>` | Full metadata from file path |
-| `GetMetaInfo(stream, format)` | `Task<MediaMetadata>` | Full metadata from stream |
+| `GetChannelsAndSampleRateAsync()` | `Task<(int? channels, int? sampleRate)>` | Raw channel/sample-rate pair |
+| `GetMetaInfoAsync(file)` | `Task<MediaMetadata>` | Full metadata from file path |
+| `GetMetaInfoAsync(stream, format)` | `Task<MediaMetadata>` | Full metadata from stream |
 
 ### IPcmS16LeChannelManipulator
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `SplitAsync(input, output, ...)` | `Task<IReadOnlyList<string>>` | Split stereo → separate mono WAVs (naming: `{base}_channel_{N}.{ext}`) |
-| `JoinAsync(left, right, output, ...)` | `Task<string>` | Join two monos → stereo WAV |
+| `SplitAsync(input, output, ...)` | `Task<IReadOnlyList<string>>` | Split stereo → separate mono WAVs (naming: `{base}_channel_{N}.{ext}`); a bare output name is resolved against `WritableDirectory` and the returned paths are the ones actually written |
+| `JoinAsync(left, right, output, ...)` | `Task<string>` | Join two monos → stereo WAV; same output-name resolution as `SplitAsync` |
 
 ### IFFRawExecutor
 
@@ -417,7 +417,7 @@ Both payloads are fully static: `readelf -d sa/native/ffmpeg` has no dynamic sec
 readelf -d sa/native/ffmpeg | grep NEEDED   # no output expected
 ```
 
-⚠️ **No fallback from a broken bundle.** Discovery takes the first *existing* file, so when `sa/native/ffmpeg` is present but cannot run, the system FFmpeg is not tried — fix the bundle or set `FFMpegOptions.ExecutablePath`. The real cause is surfaced: `GetVersion()`, `GetFormats()` and `GetCodecs()` throw `ProcessExecutionResultException` with the exit code and the ffmpeg stderr tail.
+⚠️ **No fallback from a broken bundle.** Discovery takes the first *existing* file, so when `sa/native/ffmpeg` is present but cannot run, the system FFmpeg is not tried — fix the bundle or set `FFMpegOptions.ExecutablePath`. The real cause is surfaced: `GetVersionAsync()`, `GetFormatsAsync()` and `GetCodecsAsync()` throw `ProcessExecutionResultException` with the exit code and the ffmpeg stderr tail.
 
 **Discovery order:**
 1. `AppContext.BaseDirectory/ffmpeg`
