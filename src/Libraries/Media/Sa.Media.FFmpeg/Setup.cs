@@ -110,7 +110,17 @@ public static class Setup
         services.TryAddSingleton<IProcessExecutor, ProcessExecutor>();
         services.TryAddSingleton<IFFMpegLocator, FFMpegLocator>();
 
-        services.TryAddSingleton<IPcmS16LeChannelManipulator, PcmS16LeChannelManipulator>();
+        services.TryAddSingleton<IPcmS16LeChannelManipulator>(sp =>
+        {
+            // WritableDirectory нужен манипулятору, чтобы разрешать имена выходных файлов так же,
+            // как это делает FFMpegExecutor: SplitAsync/JoinAsync ходят и через него, и через
+            // raw-executor, и один из путей обязан не отставать от другого.
+            var options = sp.GetRequiredService<IOptions<FFMpegOptions>>().Value;
+            return new PcmS16LeChannelManipulator(
+                sp.GetRequiredService<IFFMpegExecutor>(),
+                sp.GetRequiredService<IFFProbeExecutor>(),
+                options.WritableDirectory);
+        });
 
         services.TryAddSingleton<IFFMpegExecutorFactory, FFMpegExecutorFactory>();
 

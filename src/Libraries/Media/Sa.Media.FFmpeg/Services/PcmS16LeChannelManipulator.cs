@@ -2,11 +2,21 @@ namespace Sa.Media.FFmpeg.Services;
 
 internal sealed class PcmS16LeChannelManipulator(
     IFFMpegExecutor? ffmpeg = null,
-    IFFProbeExecutor? ffprobe = null)
+    IFFProbeExecutor? ffprobe = null,
+    string? writableDirectory = null)
     : IPcmS16LeChannelManipulator
 {
     private readonly IFFMpegExecutor _ffmpeg = ffmpeg ?? IFFMpegExecutor.Default;
     private readonly IFFProbeExecutor _ffprobe = ffprobe ?? IFFProbeExecutor.Default;
+    private readonly string? _writableDirectory =
+        string.IsNullOrWhiteSpace(writableDirectory) ? null : writableDirectory;
+
+    /// <summary>
+    /// Разрешает имя выходного файла так же, как <see cref="FFMpegExecutor"/>:
+    /// иначе моно-ветка <see cref="SplitAsync"/> писала в <c>WritableDirectory</c>, а стерео-ветка
+    /// (raw-executor, без <see cref="OutputPaths"/>) — в текущий каталог процесса.
+    /// </summary>
+    private string ResolveOutput(string outputFileName) => OutputPaths.Resolve(outputFileName, _writableDirectory);
 
     /// <summary>
     /// Splits the audio file into individual channels and saves each channel as a separate WAV file.
@@ -43,9 +53,13 @@ internal sealed class PcmS16LeChannelManipulator(
         }
 
         var outFileExtension = Path.GetExtension(outputFileName) is { Length: > 0 } ext ? ext : ".wav";
+
+        // Сначала разрешаем базовое имя (возможно, относительно WritableDirectory), и только
+        // потом строим имена каналов: иначе возвращённые пути не совпадали бы с созданными файлами.
+        string resolvedBase = ResolveOutput(outputFileName);
         string outFilePrefix = Path.Combine(
-            Path.GetDirectoryName(outputFileName) ?? string.Empty,
-            Path.GetFileNameWithoutExtension(outputFileName));
+            Path.GetDirectoryName(resolvedBase) ?? string.Empty,
+            Path.GetFileNameWithoutExtension(resolvedBase));
 
         if (channels == 1)
         {
@@ -99,7 +113,10 @@ internal sealed class PcmS16LeChannelManipulator(
         if (!File.Exists(rightFileName))
             throw new FileNotFoundException($"Right input file not found: '{rightFileName}'.", rightFileName);
 
-        var cmd = BuildJoinCommand(leftFileName, rightFileName, outputFileName, outputSampleRate, isOverwrite);
+        // Как и в SplitAsync: имя без каталога уходит в WritableDirectory, а возвращаем уже
+        // разрешённый путь — иначе вызывающий получал бы путь к файлу, которого нет.
+        string resolvedOutput = ResolveOutput(outputFileName);
+        var cmd = BuildJoinCommand(leftFileName, rightFileName, resolvedOutput, outputSampleRate, isOverwrite);
 
         _ = await _ffmpeg.Executor.ExecuteAsync(
             cmd,
@@ -107,7 +124,7 @@ internal sealed class PcmS16LeChannelManipulator(
             timeout: timeout,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        return outputFileName;
+        return resolvedOutput;
     }
 
     #region Private command builders

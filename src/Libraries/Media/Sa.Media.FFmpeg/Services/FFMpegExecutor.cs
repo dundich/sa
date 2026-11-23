@@ -13,13 +13,7 @@ internal sealed class FFMpegExecutor(IFFRawExecutor executor, string? writableDi
     public IFFRawExecutor Executor => executor;
 
     /// <summary>Разрешает имя выходного файла относительно <see cref="FFMpegOptions.WritableDirectory"/>.</summary>
-    string ResolveOutput(string outputFileName)
-    {
-        if (_writableDirectory is null || !string.IsNullOrEmpty(Path.GetDirectoryName(outputFileName)))
-            return outputFileName;
-
-        return Path.Combine(_writableDirectory, outputFileName);
-    }
+    string ResolveOutput(string outputFileName) => OutputPaths.Resolve(outputFileName, _writableDirectory);
 
     // GetVersion/GetFormats/GetCodecs раньше игнорировали код возврата: если ffmpeg не запускался
     // вовсе (битый бандл, noexec на каталоге, чужая платформа), метод возвращал пустую строку,
