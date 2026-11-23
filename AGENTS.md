@@ -18,7 +18,7 @@ A monorepo of independent **Native AOT-compatible** .NET libraries (`Sa.*`) for 
 
 ## Public API tracking
 - Every library carries `PublicAPI.Shipped.txt` / `PublicAPI.Unshipped.txt` (`Microsoft.CodeAnalysis.PublicApiAnalyzers`). A new or changed public member is **RS0016** until its signature is added to `PublicAPI.Unshipped.txt`; a removed one is **RS0017**.
-- The shipped list is the released surface: when a version is published, move its `Unshipped` entries into `Shipped`.
+- The shipped list is the released surface: when a version is published, move its `Unshipped` entries into `Shipped` — `./build-sh/do-release.sh api` does it, and it is not a copy: a `*REMOVED*` entry deletes the matching shipped line (copying it verbatim fails the build with RS0024).
 - `Version` is **0.21.0** in `src/Libraries/Directory.Build.props`, and `PackageValidationBaselineVersion` pins the same release. Bump both together when a release goes out, so a breaking change then fails `dotnet pack` (`EnablePackageValidation`).
 - An intentional break inside a `0.x` minor bump is recorded per project in `CompatibilitySuppressions.xml` (generated with `dotnet pack -p:ApiCompatGenerateSuppressionFile=true`, committed with a comment saying why) instead of unpinning the baseline, so everything else stays guarded. The file is dropped again when the baseline is pinned to that release: against itself the recorded removals no longer exist, and ApiCompat fails the pack on unnecessary suppressions.
 
@@ -31,9 +31,10 @@ A monorepo of independent **Native AOT-compatible** .NET libraries (`Sa.*`) for 
 | Check formatting | `dotnet format src/Sa.slnx --no-restore --verify-no-changes` |
 | Run **all** tests | `dotnet test --max-parallel-test-modules 2 --solution src/Sa.slnx --no-build --no-restore` (any cwd)  ·  or `./build-sh/do-test.sh` (builds first, then caps parallelism) |
 | **Full gate** (all tests, as CI sees them) | `dotnet build src/Sa.slnx -c Debug --no-restore` **then** the all-tests command above — the build configuration and the run must match, see *The full gate must build the configuration it tests* |
+| Release the family | `./build-sh/do-release.sh status` → `prepare` → `commit --tag` → `publish` → `pin` — each step refuses to run out of order, `--dry-run` prints the commands. See `build-sh/readme.md` |
 | Skip local-infra suites | `test_ci()` in `build-sh/tasks.sh` runs `dotnet test ... --filter "Category!=Local"`. It has **no** entry-point script and the GitHub workflow does not use it (CI runs the full suite); 4 test files carry `[Trait("Category", "Local")]`, all in `Sa.Configuration.PostgreSqlTests`. |
 
-Build/test helpers live in **`build-sh/`** (POSIX bash, `tasks.sh` holds the shared functions). Entry points: `do-build.sh`, `do-test.sh`, `do-package.sh`, `do-package-check.sh`, `do-push-local.sh`, `do-push-prod.sh`, `do-push-prod-ex.sh`, `do-docker-images.sh`, `do-docker-bypass.sh`, `do-secrets.sh`, `do-fix-max-path-linux.sh`.
+Build/test helpers live in **`build-sh/`** (POSIX bash, `tasks.sh` holds the shared functions). Entry points: `do-build.sh`, `do-test.sh`, `do-package.sh`, `do-release.sh`, `do-package-check.sh`, `do-push-local.sh`, `do-push-prod.sh`, `do-push-prod-ex.sh`, `do-docker-images.sh`, `do-docker-bypass.sh`, `do-secrets.sh`, `do-fix-max-path-linux.sh`.
 
 ### `global.json` lives at the repository root
 `global.json` sets `"test": { "runner": "Microsoft.Testing.Platform" }`. It used to live in `src/`, which meant `dotnet test` only picked up the MTP driver when the current directory was `src/` or below; a run from the repo root failed with:

@@ -5,6 +5,7 @@ Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 ## Contents
 
 - [Usage](#usage)
+- [Release](#release)
 - [Test container images](#test-container-images)
   - [S3 server image](#s3-server-image)
   - [When Docker Hub is unreachable or slow](#when-docker-hub-is-unreachable-or-slow)
@@ -30,6 +31,13 @@ Alternative to PowerShell `build/` — these scripts work on Linux/macOS.
 # Push packages to nuget.org (API key from the environment, never echoed)
 NUGET_API_KEY=... ./do-push-prod.sh
 
+# Release the whole family: API fold -> gate -> pack -> commit -> publish -> baseline pin
+./do-release.sh status
+./do-release.sh prepare
+./do-release.sh commit --tag --notes dist/release-0.22.0.md
+./do-release.sh publish --push
+./do-release.sh pin
+
 # Enable long paths on Linux (create /sa symlink)
 sudo ./do-fix-max-path-linux.sh
 
@@ -49,6 +57,45 @@ sudo ./do-docker-bypass.sh status
 sudo ./do-docker-bypass.sh on
 sudo ./do-docker-bypass.sh off
 ```
+
+## Release
+
+`./do-release.sh` drives one release end to end. Each step is a separate command, so the state can
+be inspected between them:
+
+| Command | What it does |
+|---|---|
+| `status` | version, tag, baseline, `dist/` contents, unshipped entries, recorded breaks |
+| `api` | folds every `PublicAPI.Unshipped.txt` into `Shipped`; a `*REMOVED*` entry deletes the matching shipped line instead of being copied (the RS0024 trap) |
+| `prepare` | `api`, then `dotnet format --verify-no-changes`, the full test gate, `package()` and the FFmpeg payload check |
+| `commit [--tag]` | commits only the API lists (the release commit); `--tag` creates the annotated tag from `--notes` |
+| `publish` | pushes to nuget.org, then `src/nupkgs`, then creates the GitHub release; `--push` also pushes the branch and tag |
+| `pin` | moves `PackageValidationBaselineVersion` to the released version, drops the `CompatibilitySuppressions.xml` files, re-packs to prove it and commits |
+
+Credentials are read from the environment or from `.secrets/` (git-ignored) and never printed:
+
+- `NUGET_API_KEY` or `.secrets/nuget-key` — nuget.org push;
+- `GITHUB_TOKEN` or `.secrets/github-token` — GitHub release (`publish` makes the API call with
+  `python3`; `--no-github` skips that part).
+
+Release notes are prose, so the script never writes them: pass `--notes FILE`, default
+`dist/release-<version>.md`. `prepare` stashes and restores `*.md` in `dist/`, because
+`package()` → `build()` → `clean()` wipes that folder.
+
+Two things the script deliberately refuses to guess:
+
+- **a break.** When `dotnet pack` fails with CP0001/CP0002 that is a release decision: record the
+  intended removals in `CompatibilitySuppressions.xml`
+  (`dotnet pack <proj> -p:ApiCompatGenerateSuppressionFile=true`) and pack again — or revert them.
+- **the order.** `pin` needs the released version published and resolvable; `publish` needs the
+  packages packed and the tag created. A step run out of order fails with the reason instead of
+  doing something half-right.
+
+`commit --tag` tags the release commit. v0.20.0 and v0.21.0 happen to point at the later
+baseline-pin commit instead; the pin changes no package content, so the release commit is the
+accurate target — `git tag -f` if the old shape is wanted.
+
+`--dry-run` prints the mutating commands instead of running them.
 
 ## Test container images
 
