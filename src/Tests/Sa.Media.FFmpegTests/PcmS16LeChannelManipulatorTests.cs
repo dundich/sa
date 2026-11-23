@@ -3,8 +3,12 @@ using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpegTests;
 
-public sealed class PcmS16LeChannelManipulatorTests
+public sealed class PcmS16LeChannelManipulatorTests : IDisposable
 {
+    private readonly TempDirectory _output = new();
+
+    public void Dispose() => _output.Dispose();
+
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     [Theory]
@@ -18,7 +22,7 @@ public sealed class PcmS16LeChannelManipulatorTests
 
         var splitter = new PcmS16LeChannelManipulator(fakeFFMpeg, fakeFFProbe);
 
-        string outputPath = "./data/output.wav_";
+        string outputPath = _output.Combine("output.wav_");
 
         // Act
         var result = await splitter.SplitAsync(
@@ -31,6 +35,7 @@ public sealed class PcmS16LeChannelManipulatorTests
         Assert.Equal(2, result.Count);
         Assert.EndsWith("output_channel_0.wav_", result[0]);
         Assert.EndsWith("output_channel_1.wav_", result[1]);
+        Assert.All(result, file => Assert.True(File.Exists(file), file));
 
         (int? channels, int? sampleRate) = await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync(result[0], CancellationToken);
 
@@ -46,17 +51,20 @@ public sealed class PcmS16LeChannelManipulatorTests
 
         var manipulator = new PcmS16LeChannelManipulator();
 
+        string outputPath = _output.Combine("stereo_join.wav_");
+
         // Act
         var result = await manipulator.JoinAsync(
             "./data/side_left.wav"
             , "./data/side_right.wav"
-            , "./data/stereo_join.wav_"
+            , outputPath
             , isOverwrite: true
             , outputSampleRate: 16000
             , cancellationToken: CancellationToken);
 
         // Assert
-        Assert.Equal("./data/stereo_join.wav_", result);
+        Assert.Equal(outputPath, result);
+        Assert.True(File.Exists(result));
 
         (int? channels, int? sampleRate) =
             await IFFProbeExecutor.Default.GetChannelsAndSampleRateAsync(result, CancellationToken);

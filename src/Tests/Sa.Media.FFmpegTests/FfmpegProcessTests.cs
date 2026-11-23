@@ -12,22 +12,20 @@ namespace Sa.Media.FFmpegTests;
 /// а .NET — и на глаз отличить «экранировано правильно» от «просто не повезло» нельзя.
 /// </para>
 /// </summary>
-public sealed class FfmpegProcessTests
+public sealed class FfmpegProcessTests : IDisposable
 {
     static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     const string SourceWav = "./data/stereo_join.wav";
 
-    /// <summary>Каталог, куда пишут тесты. Общий на класс: временные файлы сами удалять не нужно.</summary>
-    static string WorkDir
-    {
-        get
-        {
-            var dir = Path.Combine(Path.GetTempPath(), "sa-ffmpeg-tests");
-            Directory.CreateDirectory(dir);
-            return dir;
-        }
-    }
+    /// <summary>
+    /// Каталог, куда пишут тесты. Раньше это был общий <c>sa-ffmpeg-tests</c> в temp,
+    /// который переживал прогоны и мог оставить файлы от предыдущего запуска;
+    /// теперь — уникальный каталог на тест, удаляемый в <see cref="Dispose"/>.
+    /// </summary>
+    readonly TempDirectory _work = new();
+
+    public void Dispose() => _work.Dispose();
 
     /// <summary>
     /// Имя файла из символов, которые ломают наивное склеивание аргументов. Набор зависит от
@@ -60,9 +58,9 @@ public sealed class FfmpegProcessTests
 
         foreach (var name in HostileFileNames())
         {
-            var input = Path.Combine(WorkDir, name);
+            var input = _work.Combine(name);
             File.Copy(SourceWav, input, overwrite: true);
-            var output = Path.Combine(WorkDir, $"out_{Path.GetFileNameWithoutExtension(name)}.wav");
+            var output = _work.Combine($"out_{Path.GetFileNameWithoutExtension(name)}.wav");
 
             await mpeg.ConvertToPcmS16LeAsync(input, output, cancellationToken: CancellationToken);
 
@@ -75,10 +73,10 @@ public sealed class FfmpegProcessTests
     public async Task ConvertToPcmS16Le_ThrowsWhenInputIsMissing()
     {
         var mpeg = IFFMpegExecutor.Default;
-        var missing = Path.Combine(WorkDir, "нет-такого-файла.wav");
+        var missing = _work.Combine("нет-такого-файла.wav");
 
         await Assert.ThrowsAsync<FileNotFoundException>(
-            () => mpeg.ConvertToPcmS16LeAsync(missing, Path.Combine(WorkDir, "o.wav"), cancellationToken: CancellationToken));
+            () => mpeg.ConvertToPcmS16LeAsync(missing, _work.Combine("o.wav"), cancellationToken: CancellationToken));
     }
 
     [Fact]
@@ -93,8 +91,8 @@ public sealed class FfmpegProcessTests
         // 7.1.5), — код возврата это не ловит, и только проверка «файл существует» до запуска
         // (и после) делает поведение предсказуемым.
         var mpeg = IFFMpegExecutor.Default;
-        var input = Path.Combine(WorkDir, "no-overwrite-in.wav");
-        var output = Path.Combine(WorkDir, "no-overwrite-out.wav");
+        var input = _work.Combine("no-overwrite-in.wav");
+        var output = _work.Combine("no-overwrite-out.wav");
         File.Copy(SourceWav, input, overwrite: true);
         File.Copy(SourceWav, output, overwrite: true);
 
@@ -111,8 +109,8 @@ public sealed class FfmpegProcessTests
     public async Task ConvertToPcmS16Le_OverwritesWhenAllowed()
     {
         var mpeg = IFFMpegExecutor.Default;
-        var input = Path.Combine(WorkDir, "overwrite-in.wav");
-        var output = Path.Combine(WorkDir, "overwrite-out.wav");
+        var input = _work.Combine("overwrite-in.wav");
+        var output = _work.Combine("overwrite-out.wav");
         File.Copy(SourceWav, input, overwrite: true);
         File.WriteAllBytes(output, new byte[1024]);
 
@@ -132,7 +130,7 @@ public sealed class FfmpegProcessTests
         // реальный размер. Само аудио в обоих случаях идентично.
         var mpeg = IFFMpegExecutor.Default;
 
-        var fromFile = Path.Combine(WorkDir, "determinism-file.wav");
+        var fromFile = _work.Combine("determinism-file.wav");
         await mpeg.ConvertToPcmS16LeAsync(SourceWav, fromFile, cancellationToken: CancellationToken);
 
         var fromStream = new MemoryStream();
@@ -158,8 +156,8 @@ public sealed class FfmpegProcessTests
         // Иначе сравнение «одинакового аудио» по хешу между запусками бессмысленно.
         var mpeg = IFFMpegExecutor.Default;
 
-        var first = Path.Combine(WorkDir, "determinism-run1.wav");
-        var second = Path.Combine(WorkDir, "determinism-run2.wav");
+        var first = _work.Combine("determinism-run1.wav");
+        var second = _work.Combine("determinism-run2.wav");
 
         await mpeg.ConvertToPcmS16LeAsync(SourceWav, first, cancellationToken: CancellationToken);
         await mpeg.ConvertToPcmS16LeAsync(SourceWav, second, cancellationToken: CancellationToken);
@@ -239,7 +237,7 @@ public sealed class FfmpegProcessTests
         await CodecProbe.RequireEncoderAvailable("libmp3lame", CancellationToken);
 
         var mpeg = IFFMpegExecutor.Default;
-        var output = Path.Combine(WorkDir, "check.mp3");
+        var output = _work.Combine("check.mp3");
 
         await mpeg.ConvertToMp3Async(SourceWav, output, cancellationToken: CancellationToken);
 

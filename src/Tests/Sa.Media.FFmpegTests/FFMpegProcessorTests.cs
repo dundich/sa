@@ -3,8 +3,13 @@ using Sa.Media.FFmpeg.Services;
 
 namespace Sa.Media.FFmpegTests;
 
-public sealed class FFMpegProcessorTests
+public sealed class FFMpegProcessorTests : IDisposable
 {
+    // Выходные файлы — во временном каталоге теста, а не в ./data с фикстурами.
+    private readonly TempDirectory _output = new();
+
+    public void Dispose() => _output.Dispose();
+
     private static CancellationToken CancellationToken => TestContext.Current.CancellationToken;
 
     static IFFMpegExecutor Processor => IFFMpegExecutor.Default;
@@ -41,8 +46,8 @@ public sealed class FFMpegProcessorTests
     {
         // Act
         await Processor.ConvertToPcmS16LeAsync(
-            testFilePath, "./data/output.wav", isOverwrite: true, cancellationToken: CancellationToken);
-        Assert.True(File.Exists("./data/output.wav"));
+            testFilePath, _output.Combine("output.wav"), isOverwrite: true, cancellationToken: CancellationToken);
+        Assert.True(File.Exists(_output.Combine("output.wav")));
     }
 
     [Theory]
@@ -56,7 +61,6 @@ public sealed class FFMpegProcessorTests
         using var inputStream = File.OpenRead(testFilePath);
 
         using var fileStream = new MemoryStream();
-        // new FileStream("./data/output.wav", FileMode.Create, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
 
         // Act
         await Processor.ConvertToPcmS16LeAsync(inputStream, ext, async (outStream, _) =>
@@ -153,7 +157,7 @@ public sealed class FFMpegProcessorTests
         // (win-x64 payload старше фикса кодеков) — тест пропускается, а не падает.
         await CodecProbe.RequireEncoderAvailable("libmp3lame", CancellationToken);
 
-        var fn = "./data/output.mp3";
+        var fn = _output.Combine("output.mp3");
         // Act
         await Processor.ConvertToMp3Async(
             testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
@@ -176,7 +180,7 @@ public sealed class FFMpegProcessorTests
         // по ней видно, опрошен ли бандл или подобран чужой ffmpeg из PATH.
         await CodecProbe.EnsureEncoderAvailable("libvorbis", CancellationToken);
 
-        var fn = "./data/output.ogg_";
+        var fn = _output.Combine("output.ogg_");
         // Act
         await Processor.ConvertToOggAsync(
             testFilePath, fn, isOverwrite: true, cancellationToken: CancellationToken);
@@ -191,7 +195,7 @@ public sealed class FFMpegProcessorTests
     public async Task ConvertToMono_ShouldProduceValidMonoFile(string inputPath)
     {
         // Arrange
-        string outputPath = Path.ChangeExtension(inputPath, ".pcm");
+        string outputPath = _output.Combine(Path.ChangeExtension(Path.GetFileName(inputPath), ".pcm"));
 
         if (File.Exists(outputPath))
             File.Delete(outputPath);
@@ -219,7 +223,7 @@ public sealed class FFMpegProcessorTests
     public async Task ConvertToPcmS16LePreservingFormat_ShouldPreserveOriginalSettings(string inputPath)
     {
         // Arrange
-        string outputPath = "./data/output_preserved.wav";
+        string outputPath = _output.Combine("output_preserved.wav");
 
         if (File.Exists(outputPath))
             File.Delete(outputPath);
@@ -250,7 +254,7 @@ public sealed class FFMpegProcessorTests
     public async Task ConvertToPcmS32Le_ShouldProduceValidFloat32File(string inputPath)
     {
         // Arrange
-        string outputPath = "./data/output_pcmf32le.wav";
+        string outputPath = _output.Combine("output_pcmf32le.wav");
 
         if (File.Exists(outputPath))
             File.Delete(outputPath);
@@ -280,7 +284,7 @@ public sealed class FFMpegProcessorTests
     public async Task ConvertToPcmF32LeRaw_ShouldProduceValidRawFile(string inputPath)
     {
         // Arrange
-        string outputPath = "./data/output_rawf32le.f32le";
+        string outputPath = _output.Combine("output_rawf32le.f32le");
 
         if (File.Exists(outputPath))
             File.Delete(outputPath);

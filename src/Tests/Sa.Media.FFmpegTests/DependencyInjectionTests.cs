@@ -90,4 +90,37 @@ public sealed class DependencyInjectionTests
                 File.Delete(file);
         }
     }
+
+    [Fact]
+    public async Task WritableDirectory_IsPropagatedToTheChannelManipulator()
+    {
+        // Манипулятор получает WritableDirectory из тех же опций, что и исполнители: без этого
+        // SplitAsync/JoinAsync (raw-executor) писали в CWD, пока ConvertToPcm* — в WritableDirectory.
+        var dir = Path.Combine(Path.GetTempPath(), "sa-ffmpeg-di-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSaFFMpeg(o => o.Options(ob => ob.Configure(x => x.WritableDirectory = dir)));
+
+            using var serviceProvider = services.BuildServiceProvider();
+            var manipulator = serviceProvider.GetRequiredService<IPcmS16LeChannelManipulator>();
+
+            IReadOnlyList<string> files = await manipulator.SplitAsync(
+                Path.GetFullPath("./data/input.mp3"),
+                "bare.wav",
+                cancellationToken: TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, files.Count);
+            Assert.All(files, file =>
+            {
+                Assert.StartsWith(Path.GetFullPath(dir), file, StringComparison.Ordinal);
+                Assert.True(File.Exists(file), $"Ожидался файл {file}");
+            });
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+    }
 }

@@ -12,24 +12,18 @@ namespace Sa.Media.FFmpegTests;
 /// проверяется явно, на подменённом исполнителе, без запуска процесса.
 /// </para>
 /// </summary>
-public sealed class CommandLineTests
+public sealed class CommandLineTests : IDisposable
 {
     static readonly string Input = Path.GetFullPath("./data/input.wav");
-    static readonly string Output = Path.GetFullPath("./data/out.wav");
 
-    public CommandLineTests()
-    {
-        // RecordingProcessExecutor создаёт выходные файлы успешных файловых команд, а
-        // каталог с результатами не чистится между запусками. Удаляем их перед каждым
-        // методом: тесты обязаны быть идемпотентными независимо от порядка и от
-        // артефактов предыдущих запусков (иначе «isOverwrite=false + файл есть» валит
-        // тест, который в чистом каталоге прошёл бы).
-        foreach (var file in new[] { Output, Path.Combine(Path.GetDirectoryName(Output)!, "out put.wav") })
-        {
-            if (File.Exists(file))
-                File.Delete(file);
-        }
-    }
+    // RecordingProcessExecutor создаёт выходные файлы успешных файловых команд, поэтому
+    // выходы живут в уникальном каталоге теста. Раньше они писались в ./data с фикстурами
+    // и чистились в конструкторе — при двух параллельных классах это общий каталог.
+    readonly TempDirectory _output = new();
+
+    public void Dispose() => _output.Dispose();
+
+    string Output => _output.Combine("out.wav");
 
     static (FFMpegExecutor Executor, RecordingProcessExecutor Process) CreateMpegExecutor()
     {
@@ -101,7 +95,7 @@ public sealed class CommandLineTests
     [Fact]
     public async Task ConvertToPcmS16Le_QuotesPathsContainingSpaces()
     {
-        var spaced = Path.Combine(Path.GetDirectoryName(Output)!, "out put.wav");
+        var spaced = _output.Combine("out put.wav");
         var (mpeg, process) = CreateMpegExecutor();
 
         await mpeg.ConvertToPcmS16LeAsync(Input, spaced, cancellationToken: TestContext.Current.CancellationToken);
@@ -113,7 +107,7 @@ public sealed class CommandLineTests
     public async Task ConvertToPcmS16Le_ResolvesBareFileNameAgainstWritableDirectory()
     {
         // Регрессия: WritableDirectory существовал в опциях, но не читался нигде.
-        var writable = Path.GetTempPath();
+        var writable = _output.Path;
         var process = new RecordingProcessExecutor();
         var raw = new FFRawExecutor(process, "/ffmpeg", TimeSpan.FromSeconds(30));
         var mpeg = new FFMpegExecutor(raw, writable);
@@ -128,7 +122,7 @@ public sealed class CommandLineTests
     {
         var process = new RecordingProcessExecutor();
         var raw = new FFRawExecutor(process, "/ffmpeg", TimeSpan.FromSeconds(30));
-        var mpeg = new FFMpegExecutor(raw, Path.GetTempPath());
+        var mpeg = new FFMpegExecutor(raw, _output.Path);
 
         await mpeg.ConvertToPcmS16LeAsync(Input, Output, cancellationToken: TestContext.Current.CancellationToken);
 
