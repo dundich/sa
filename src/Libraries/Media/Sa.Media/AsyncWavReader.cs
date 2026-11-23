@@ -156,8 +156,10 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         int sampleSize = header.SampleSize;
         int bytesPerSample = format.GetBytesPerSample();
 
-        long dataSize = header.ResolveDataSize();
-        long remaining = dataSize <= 0 ? long.MaxValue : dataSize;
+        // Явно объявленный размер 0 — это пустой data-чанк, а не «размер неизвестен».
+        // Оба случая раньше попадали в long.MaxValue, и после пустого data-чанка читатель
+        // отдавал как аудио байты следующих чанков (LIST/ID3 в конце файла).
+        long remaining = header.HasDataSize ? header.DataSize : long.MaxValue;
 
         bool direct = format == AudioEncoding.Pcm16BitSigned
             && header.EffectiveAudioFormat == WaveFormatType.Pcm
@@ -173,7 +175,9 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         {
             long position = 0;
             int samplesInChunk = 0;
-            bool eof = false;
+            // Нулевой data-чанк: читать нечего, и первый ReadAtLeastAsync не должен даже
+            // запускаться — иначе он подхватит байты следующего чанка.
+            bool eof = remaining == 0;
 
             while (!eof)
             {
@@ -263,8 +267,8 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         int sampleSize = header.SampleSize;
         Func<ReadOnlySpan<byte>, float> convert = header.GetNormalizedFloatConverter();
 
-        long dataSize = header.ResolveDataSize();
-        long remaining = dataSize <= 0 ? long.MaxValue : dataSize;
+        // См. ReadChannelChunksAsync: размер 0 — это пустой data-чанк, а не «неизвестен».
+        long remaining = header.HasDataSize ? header.DataSize : long.MaxValue;
 
         float[] output = ArrayPool<float>.Shared.Rent(framesPerBatch * 2);
         byte[] sample = ArrayPool<byte>.Shared.Rent(sampleSize);
@@ -272,7 +276,8 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         try
         {
             int framesInChunk = 0;
-            bool eof = false;
+            // Пустой data-чанк: ни одного кадра, без обращения к пайпу (см. ReadChannelChunksAsync).
+            bool eof = remaining == 0;
 
             while (!eof)
             {
