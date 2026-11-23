@@ -144,12 +144,15 @@ internal static class WavTestData
 
         await using AsyncWavReader reader = AsyncWavReader.CreateFromFile(path);
 
-        await foreach (AudioNormalizedPacket packet in reader
-            .ReadDoubleSamplesAsync(cancellationToken: cancellationToken)
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(channelId, 4096, AudioEncoding.IeeeFloat32Bit, cancellationToken)
             .WithCancellation(cancellationToken))
         {
-            if (packet.ChannelId == channelId)
-                samples.Add(packet.Sample);
+            ReadOnlySpan<byte> bytes = chunk.Samples.Span;
+            for (int i = 0; i + sizeof(float) <= bytes.Length; i += sizeof(float))
+            {
+                samples.Add(BitConverter.ToSingle(bytes[i..(i + sizeof(float))]));
+            }
         }
 
         return samples.ToArray();

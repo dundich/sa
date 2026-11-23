@@ -46,47 +46,38 @@ public class AsyncWavReaderTests
     }
 
 
+    // TC-2.1 | F-11
     [Fact]
-    public async Task ReadRawChannelSamplesAsync_ValidWavFile_YieldsNonEmptyData()
+    public async Task ReadChannelChunksAsync_ValidWavFile_YieldsNonEmptyData()
     {
         using var reader = AsyncWavReader.CreateFromFile(FILE);
 
-        await foreach (var (_, sample, _, _) in
-            reader.ReadSamplesPerChannelAsync(cancellationToken: TestContext.Current.CancellationToken))
+        int chunks = 0;
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            Assert.True(sample.Length > 0);
+            Assert.True(chunk.Samples.Length > 0);
+            chunks++;
         }
 
-        Assert.True(true);
+        Assert.True(chunks > 0);
     }
 
-
+    // TC-2.2 | F-11
     [Fact]
-    public async Task ReadNormalizedDoubleSamplesAsync_ValidWavFile_YieldsInRangeValues()
+    public async Task ReadChannelChunksAsync_ValidWavFile_YieldsChunks()
     {
         using var reader = AsyncWavReader.CreateFromFile(FILE);
 
-        await foreach (var (_, sample, _, _) in
-            reader.ReadDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            Assert.InRange(sample, -1.0, 1.0);
+            Assert.True(chunk.Samples.Length > 0);
             return;
         }
+
+        Assert.Fail("No chunks produced");
     }
-
-    [Fact]
-    public async Task ReadStreamableChunksAsync_ValidWavFile_YieldsChunks()
-    {
-        using var reader = AsyncWavReader.CreateFromFile(FILE);
-
-        await foreach (var (_, samples, _, _) in
-            reader.ReadStreamableChunksAsync(samplesPerBatch: 1024, cancellationToken: TestContext.Current.CancellationToken))
-        {
-            Assert.True(samples.Length > 0);
-            return;
-        }
-    }
-
 
     [Fact]
     public async Task OpenWavFile_MultipleProcesses_NoException()
@@ -102,7 +93,6 @@ public class AsyncWavReaderTests
         Assert.NotNull(reader1);
         Assert.NotNull(reader2);
     }
-
 
     [Fact]
     public async Task ReadHeader_ValidMockWav_ReturnsCorrectHeader()
@@ -120,193 +110,127 @@ public class AsyncWavReaderTests
         Assert.Equal(WaveFormatType.Pcm, header.AudioFormat);
     }
 
+    // TC-2.3 | F-11
     [Fact]
-    public async Task ReadNormalizedDoubleSamples_ValidMockWav_YieldsInRangeValues()
-    {
-        var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
-        var reader = new AsyncWavReader(mockStream, true);
-
-        await foreach (var (_, samples, _, _)
-            in reader.ReadDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
-        {
-            Assert.InRange(samples, -1.0, 1.0);
-        }
-    }
-
-    [Fact]
-    public async Task ReadStreamableChunks_ValidMockWav_YieldsChunks()
+    public async Task ReadChannelChunksAsync_ValidMockWav_YieldsChunks()
     {
         var mockStream = MockWavGenerator.CreateTestPcm16Wav(seconds: 1);
         var reader = new AsyncWavReader(mockStream, true);
 
         int chunks = 0;
-        await foreach (var (_, samples, _, _)
-            in reader.ReadStreamableChunksAsync(samplesPerBatch: 1024, cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            Assert.True(samples.Length > 0);
+            Assert.True(chunk.Samples.Length > 0);
             chunks++;
         }
 
         Assert.True(chunks > 0);
     }
 
-
+    // TC-2.4 | F-11
     [Fact]
-    public async Task ReadStreamableChunksAsync_ValidWav_YieldsChunks()
+    public async Task ReadChannelChunksAsync_ValidWav_BatchIsSamplesPerChannel()
     {
         var pipe = MockWavGenerator.CreateTestPcm16Wav(seconds: 2);
         var reader = new AsyncWavReader(pipe, true);
 
-        int chunksCount = 0;
-        await foreach (var (channelId, samples, _, _)
-            in reader.ReadStreamableChunksAsync(samplesPerBatch: 512, cancellationToken: TestContext.Current.CancellationToken))
+        List<int> lengths = [];
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 512, cancellationToken: TestContext.Current.CancellationToken))
         {
-            Assert.InRange(channelId, 0, 1);
-            Assert.True(samples.Length > 0);
-            chunksCount++;
+            lengths.Add(chunk.Samples.Length);
         }
 
-        Assert.True(chunksCount > 0);
+        Assert.Equal(1024, lengths[0]); // 512 сэмплов * 2 байта
+        Assert.Equal(44100 * 2 * 2, lengths.Sum()); // 2 сек * 44100 Гц * 2 байта
     }
 
+    // TC-2.5 | F-11
     [Fact]
-    public async Task ReadRawChannelSamplesAsync_ValidStereo_ReturnsTwoChannels()
+    public async Task ReadChannelChunksAsync_Stereo_BothChannelsAreReadable()
     {
         var pipe = MockWavGenerator.CreateTestPcm16Wav(numChannels: 2);
         var reader = new AsyncWavReader(pipe, true);
 
-        List<int> channelIds = [];
-
-        await foreach (var (channelId, _, _, _) in reader
-            .ReadSamplesPerChannelAsync(cancellationToken: TestContext.Current.CancellationToken))
+        long left = 0;
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            if (!channelIds.Contains(channelId)) channelIds.Add(channelId);
+            left += chunk.Samples.Length;
         }
 
-        Assert.Equal(2, channelIds.Count);
-    }
-
-
-    [Fact]
-    public async Task ReadNormalizedDoubleSamplesAsync_WithCut_ReturnsTrimmedData()
-    {
-        const int seconds = 5;
-        var pipe = MockWavGenerator.CreateTestPcm16Wav(seconds: seconds);
-        var reader = new AsyncWavReader(pipe, true);
-
-        float cutFrom = 1.0f;
-        float cutTo = 4.0f;
-
-        int count = 0;
-        bool eof = false;
-
-        await foreach (var (_, _, _, isEof) in reader.ReadDoubleSamplesAsync(
-                TimeRange.Seconds(cutFrom, cutTo),
-                cancellationToken: TestContext.Current.CancellationToken))
+        var pipe2 = MockWavGenerator.CreateTestPcm16Wav(numChannels: 2);
+        var reader2 = new AsyncWavReader(pipe2, true);
+        long right = 0;
+        await foreach (AudioChunk chunk in reader2
+            .ReadChannelChunksAsync(1, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            count++;
-            eof = isEof;
+            right += chunk.Samples.Length;
         }
 
-        // Assert.InRange(count, 44100 * 2, 44100 * 3); // ~ от 1 до 4 секунды
-        Assert.True(eof);
+        Assert.Equal(44100 * 2, left);
+        Assert.Equal(left, right);
     }
 
-
+    // TC-2.6 | F-11
     [Fact]
-    public async Task ReadRawChannelSamplesAsync_ShouldSetIsEofAtEndOfFile()
+    public async Task ReadChannelChunksAsync_LastChunk_HasEofFlag()
     {
         using var reader = AsyncWavReader.CreateFromFile(FILE);
 
-        bool eof = false;
-        await foreach (var (_, _, _, isEof) in reader
-            .ReadSamplesPerChannelAsync(cancellationToken: TestContext.Current.CancellationToken))
+        AudioChunk last = default;
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            eof = isEof;
+            last = chunk;
         }
 
-        Assert.True(eof);
+        Assert.True(last.IsEof);
+        Assert.True(last.Samples.Length > 0);
     }
 
-
+    // TC-2.7 | F-11
     [Fact]
-    public async Task ConvertNormalizedDoubleAsync_ShouldConvertBackToPCM16()
+    public async Task ReadChannelChunksAsync_Pcm16Format_ReturnsTwoBytesPerSample()
     {
         using var reader = AsyncWavReader.CreateFromFile(FILE);
 
-        await foreach (var (_, sample, _, _) in reader.ConvertToFormatAsync(
-            AudioEncoding.Pcm16BitSigned,
-            cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, AudioEncoding.Pcm16BitSigned, TestContext.Current.CancellationToken))
         {
-            Assert.Equal(2, sample.Length); // 16-bit PCM
+            Assert.Equal(2048, chunk.Samples.Length);
+            return;
         }
+
+        Assert.Fail("No chunks produced");
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Регрессии: обрезка по времени не должна крутить PipeReader вхолостую
-    // ─────────────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Обрезка на середине файла должна завершиться сразу после cutTo и не читать хвост.
-    /// Раньше после cutTo ридер крутился в ReadAsync над одним и тем же непотреблённым
-    /// буфером (100% CPU на больших файлах, вечный цикл на live-каналах) до отмены токена.
-    /// Считаем вызовы ReadAsync, чтобы детерминированно поймать кручение.
-    /// </summary>
+    // TC-2.8 | F-11
     [Fact]
-    public async Task ReadSamplesPerChannelAsync_TrimMidFile_DoesNotSpinOnTail()
+    public async Task ReadChannelChunksAsync_WholeFile_DoesNotSpinOnTail()
     {
         // 30 секунд стерео > размера внутреннего буфера StreamPipeReader (64 KiB),
-        // хвост данных остаётся в потоке, когда cutTo уже достигнут.
+        // неполный кадр на границе буфера раньше зацикливал ReadAsync.
         var pipe = new CountingPipeReader(MockWavGenerator.CreateTestPcm16Wav(numChannels: 2, seconds: 30));
         var reader = new AsyncWavReader(pipe, true);
 
         using var watchdog = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        int frameCount = 0;
-        bool eofSeen = false;
-
-        await foreach (var (_, _, _, isEof) in reader.ReadSamplesPerChannelAsync(
-            TimeRange.Seconds(1, 2),
-            cancellationToken: watchdog.Token))
+        long bytes = 0;
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 4096, cancellationToken: watchdog.Token))
         {
-            frameCount++;
-            eofSeen |= isEof;
+            bytes += chunk.Samples.Length;
         }
 
-        Assert.True(eofSeen, "Обрезка должна завершиться пакетом с IsEof=true");
-        // ~1 секунда полезных сэмплов (44100 фреймов/с * 2 канала), с допуском на границы кадров
-        Assert.InRange(frameCount, 44100 * 2 - 8, 44100 * 2 + 8);
-        // Голова (заголовок + skip) + данные + хвост: десятки обращений.
-        // При кручении было бы > 1000 (а фактически миллионы до срабатывания watchdog).
-        Assert.True(pipe.ReadAsyncCount < 200,
-            $"Reader крутился впустую после cutTo: {pipe.ReadAsyncCount} вызовов ReadAsync");
+        Assert.Equal(30L * 44100 * 2, bytes);
+        // Один вызов ReadAsync на порцию данных StreamPipeReader; при кручении сработал бы
+        // watchdog (5 c) и OperationCanceledException, а не ~1.3K вызовов за 86 мс.
+        Assert.True(pipe.ReadAsyncCount < 2000,
+            $"Reader крутился впустую: {pipe.ReadAsyncCount} вызовов ReadAsync");
     }
 
-    [Fact]
-    public async Task ReadStreamableChunksAsync_TrimMidFile_DoesNotSpinOnTail()
-    {
-        var pipe = new CountingPipeReader(MockWavGenerator.CreateTestPcm16Wav(numChannels: 2, seconds: 30));
-        var reader = new AsyncWavReader(pipe, true);
-
-        using var watchdog = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        int chunks = 0;
-
-        await foreach (var _ in reader.ReadStreamableChunksAsync(
-            samplesPerBatch: 4096,
-            cutRange: TimeRange.Seconds(1, 2),
-            cancellationToken: watchdog.Token))
-        {
-            chunks++;
-        }
-
-        Assert.True(chunks > 0);
-        Assert.True(pipe.ReadAsyncCount < 200,
-            $"Reader крутился впустую после cutTo: {pipe.ReadAsyncCount} вызовов ReadAsync");
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Регрессии: WAVE_FORMAT_EXTENSIBLE должен читаться как обычный PCM/float
-    // ─────────────────────────────────────────────────────────────────────
-
+    // TC-2.9 | F-11
     [Fact]
     public async Task ReadHeader_ExtensiblePcmWav_ReturnsPcmHeaderAndSamples()
     {
@@ -322,15 +246,14 @@ public class AsyncWavReaderTests
         Assert.Equal(16, header.BitsPerSample);
         Assert.Equal(WavHeader.PcmSubtypeGuid, header.SubFormatGuid);
 
-        int samples = 0;
-        await foreach (var (_, value, _, _) in reader
-            .ReadDoubleSamplesAsync(cancellationToken: TestContext.Current.CancellationToken))
+        long bytes = 0;
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken))
         {
-            Assert.InRange(value, -1.0, 1.0);
-            samples++;
+            bytes += chunk.Samples.Length;
         }
 
-        Assert.Equal(44100 * 2, samples); // 1 сек * 2 канала
+        Assert.Equal(44100 * 2, bytes); // 1 сек * 2 байта на сэмпл
     }
 
     // ─────────────────────────────────────────────────────────────────────

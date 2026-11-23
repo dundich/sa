@@ -46,21 +46,23 @@ internal static class WavIO
         {
             int idx = 0;
 
-            await foreach (var packet in reader
-                .ReadFloatSamplesAsync(cancellationToken: ct)
+            // Внутренний чанковый ридер читает целыми кадрами и сразу даёт
+            // interleaved L,R float-пары — без per-sample пакетов и double-прослойки.
+            await foreach (ReadOnlyMemory<float> chunk in reader
+                .ReadInterleavedFloatChunksAsync(framesPerBatch: 8192, cancellationToken: ct)
                 .WithCancellation(ct))
             {
-                if (idx >= frames) break;
+                ReadOnlySpan<float> samples = chunk.Span;
+                int available = frames * 2 - idx;
+                if (samples.Length > available)
+                    samples = samples[..available];
 
-                if (packet.ChannelId == 0)
-                    interleaved[idx * 2] = packet.Sample;
-                else
-                    interleaved[idx * 2 + 1] = packet.Sample;
-                if (packet.ChannelId == 1) idx++;
+                samples.CopyTo(interleaved.AsSpan(idx));
+                idx += samples.Length;
             }
 
-            // idx*2 — число реально записанных слотов (без хвостового частичного фрейма).
-            return (interleaved, Math.Min(idx * 2, interleaved.Length));
+            // idx — число реально записанных float-слотов (без хвостового частичного кадра).
+            return (interleaved, Math.Min(idx, interleaved.Length));
         }
         catch
         {

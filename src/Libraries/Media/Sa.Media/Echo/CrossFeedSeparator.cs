@@ -148,22 +148,22 @@ public static class CrossFeedSeparator
         int frameIndex = 0;
         float leftSample = 0f;
 
-        // ReadFloatSamplesAsync: raw-байты конвертируются в float напрямую, без double-прослойки
-        // (раньше здесь был ReadDoubleSamplesAsync + приведение к float на каждом сэмпле).
-        await foreach (var packet in reader
-            .ReadFloatSamplesAsync(cancellationToken: cancellationToken)
+        // Внутренний чанковый ридер: raw-байты конвертируются в float напрямую,
+        // без double-прослойки и без per-sample пакетов.
+        await foreach (ReadOnlyMemory<float> chunk in reader
+            .ReadInterleavedFloatChunksAsync(framesPerBatch: 4096, cancellationToken: cancellationToken)
             .WithCancellation(cancellationToken))
         {
-            float sample = packet.Sample;
-            if (packet.ChannelId == 0)
+            // Span нельзя хранить в итераторе через yield — обращаемся к чанку по индексу.
+            for (int i = 0; i + 1 < chunk.Length; i += 2)
             {
-                leftSample = sample;
-            }
-            else
-            {
+                leftSample = chunk.Span[i];
+                float rightSample = chunk.Span[i + 1];
+
                 frameOffset--;
                 bool isEof = frameOffset == 0;
-                yield return new AudioPacket(frameIndex, leftSample, sample, isEof);
+                yield return new AudioPacket(frameIndex, leftSample, rightSample, isEof);
+
                 if (isEof)
                 {
                     frameIndex++;

@@ -127,299 +127,207 @@ public sealed class AsyncWavReader : IDisposable, IAsyncDisposable
         return header;
     }
 
-
     /// <summary>
-    /// Читает сырые сэмплы по каналам с поддержкой обрезки по времени.
+    /// Reads PCM batches for a single channel.
     /// </summary>
-    /// <param name="cutRange">Optional time range to read; the whole file is read when <c>null</c>.</param>
-    /// <param name="allowBufferReuse">
-    /// Если true - возвращает ссылку на внутренний буфер (высокая производительность, 
-    /// но данные должны быть скопированы до следующего yield return).
-    /// Если false - возвращает копию данных (безопасно, но с аллокациями).
-    /// </param>
-    /// <param name="cancellationToken">A token to cancel the enumeration.</param>
-#pragma warning disable S3776
-    public async IAsyncEnumerable<AudioPacket> ReadSamplesPerChannelAsync(
-#pragma warning restore S3776
-        TimeRange? cutRange = null,
-        bool allowBufferReuse = true,
+    /// <remarks>
+    /// В отличие от per-sample ридеров, читаем целыми кадрами и помечаем весь
+    /// буфер pipe как просмотренный. Поэтому неполный кадр на границе буфера
+    /// (например, <c>dataOffset = 78</c> при <c>blockAlign = 4</c>) не может
+    /// зациклить <c>PipeReader.ReadAsync()</c>.
+    /// </remarks>
+    /// <param name="channel">Индекс канала (0-based).</param>
+    /// <param name="samplesPerBatch">Число сэмплов на канал в одном чанке.</param>
+    /// <param name="format">Целевой формат; PCM16 читается напрямую, без double.</param>
+    /// <param name="cancellationToken">Токен отмены перечисления.</param>
+    public async IAsyncEnumerable<AudioChunk> ReadChannelChunksAsync(
+        int channel,
+        int samplesPerBatch,
+        AudioEncoding format = AudioEncoding.Pcm16BitSigned,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
+        ArgumentOutOfRangeException.ThrowIfNegative(channel);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(samplesPerBatch);
 
-        var (cutFrom, cutTo) = header.CalculateCutOffsets(cutRange ?? TimeRange.Default);
+        WavHeader header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(channel, header.NumChannels);
 
-        long offsetToSkip = cutFrom - header.DataOffset;
-
-        if (offsetToSkip > 0)
-        {
-            await _reader.SkipAsync(offsetToSkip, cancellationToken).ConfigureAwait(false);
-        }
-
-        int channels = header.NumChannels;
-        int blockAlign = header.BlockAlign;
+        int frameSize = header.BlockAlign;
         int sampleSize = header.SampleSize;
-        long currentOffset = cutFrom;
+        int bytesPerSample = format.GetBytesPerSample();
 
-        var samplePool = MemoryPool<byte>.Shared.Rent(sampleSize);
+        long dataSize = header.ResolveDataSize();
+        long remaining = dataSize <= 0 ? long.MaxValue : dataSize;
+
+        bool direct = format == AudioEncoding.Pcm16BitSigned
+            && header.EffectiveAudioFormat == WaveFormatType.Pcm
+            && header.BitsPerSample == 16;
+
+        Func<ReadOnlySpan<byte>, double>? normalize = direct ? null : header.GetNormalizedConverter();
+        Func<double, Memory<byte>, ReadOnlyMemory<byte>>? convert = direct ? null : SampleConverter.GetConverter(format);
+
+        byte[] output = ArrayPool<byte>.Shared.Rent(samplesPerBatch * bytesPerSample);
+        byte[] sample = direct ? [] : ArrayPool<byte>.Shared.Rent(sampleSize);
 
         try
         {
-            while (!cancellationToken.IsCancellationRequested)
+            long position = 0;
+            int samplesInChunk = 0;
+            bool eof = false;
+
+            while (!eof)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                ReadResult result = await _reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-                ReadOnlySequence<byte> sequence = result.Buffer;
+                ReadResult result = await _reader
+                    .ReadAtLeastAsync(frameSize, cancellationToken)
+                    .ConfigureAwait(false);
+                ReadOnlySequence<byte> buffer = result.Buffer;
+                SequencePosition consumed = buffer.Start;
 
-                // Защита от голодания PipeReader: пустой буфер + завершение потока — стоп,
-                // чтобы не зациклиться, если заголовок читался ReadAtLeastAsync малыми пучками.
-                if (sequence.IsEmpty && result.IsCompleted)
-                    yield break;
-
-                SequencePosition consumed = sequence.Start;
-                bool advancedSomething = false;
-                bool success = false;
                 try
                 {
-                    // Обрабатываем полные блоки
-                    while (sequence.Length >= blockAlign && currentOffset < cutTo)
+                    while (buffer.Length >= frameSize
+                           && samplesInChunk < samplesPerBatch
+                           && remaining > 0)
                     {
-                        ReadOnlySequence<byte> block = sequence.Slice(0, blockAlign);
+                        ReadOnlySequence<byte> frame = buffer.Slice(0, frameSize);
+                        int written = samplesInChunk * bytesPerSample;
 
-                        bool blockIsEof = (currentOffset + blockAlign >= cutTo) || result.IsCompleted;
-
-                        // Извлекаем сэмплы по каналам
-                        for (int channelId = 0; channelId < channels; channelId++)
+                        if (direct)
                         {
-                            int offsetInBlock = channelId * sampleSize;
-
-                            block.Slice(offsetInBlock, sampleSize).CopyTo(samplePool.Memory.Span);
-                            var chunk = allowBufferReuse
-                                ? samplePool.Memory[..sampleSize]
-                                : samplePool.Memory[..sampleSize].ToArray();
-                            yield return new(channelId, chunk, currentOffset, blockIsEof);
+                            frame.Slice(channel * sampleSize, sizeof(short))
+                                .CopyTo(output.AsSpan(written, sizeof(short)));
+                        }
+                        else
+                        {
+                            frame.Slice(channel * sampleSize, sampleSize).CopyTo(sample);
+                            double value = normalize!(sample.AsSpan(0, sampleSize));
+                            convert!(value, output.AsMemory(written, bytesPerSample));
                         }
 
-                        // Продвигаем позиции
-                        currentOffset += blockAlign;
-                        sequence = sequence.Slice(blockAlign);
-                        consumed = sequence.Start;
-                        advancedSomething = true;
+                        buffer = buffer.Slice(frameSize);
+                        consumed = buffer.Start;
+                        position += frameSize;
+                        if (remaining != long.MaxValue)
+                        {
+                            remaining -= frameSize;
+                        }
+
+                        samplesInChunk++;
                     }
 
-                    success = true;
+                    eof = remaining <= 0 || (result.IsCompleted && buffer.Length < frameSize);
+
+                    if (samplesInChunk > 0 && (samplesInChunk == samplesPerBatch || eof))
+                    {
+                        yield return new AudioChunk(
+                            output.AsMemory(0, samplesInChunk * bytesPerSample),
+                            position - (long)samplesInChunk * frameSize,
+                            eof);
+
+                        samplesInChunk = 0;
+                    }
                 }
                 finally
                 {
-                    if (success)
-                    {
-                        _reader.AdvanceTo(consumed, result.IsCompleted ? sequence.End : consumed);
-                    }
-                    else
-                    {
-                        _reader.AdvanceTo(sequence.Start, sequence.End); // Сброс при ошибке
-                    }
+                    _reader.AdvanceTo(consumed, buffer.End);
                 }
-
-                // Конец обрезки достигнут: хвост канала больше не нужен.
-                // Без этой проверки мы остались бы крутиться в ReadAsync над одним и тем же
-                // непотреблённым хвостом буфера (Spin), пока поток не дойдёт до EOF —
-                // для больших файлов это 100% CPU, а для live-канала (mic/network) — вечный цикл.
-                if (currentOffset >= cutTo)
-                    yield break;
-
-                if (!advancedSomething && result.IsCompleted)
-                    yield break;
             }
         }
         finally
         {
-            samplePool.Dispose();
-        }
-    }
-
-
-    /// <summary>
-    /// Читает нормализованные double-сэмплы [-1.0, 1.0],
-    /// </summary>
-    public async IAsyncEnumerable<AudioNormalizedPacket> ReadDoubleSamplesAsync(
-        TimeRange? cutRange = null,
-        bool allowBufferReuse = true,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        var convert = await GetNormalizedConverterAsync(cancellationToken).ConfigureAwait(false);
-
-        await foreach (var (channelId, rawSample, offset, isEof) in
-            ReadSamplesPerChannelAsync(cutRange, allowBufferReuse, cancellationToken: cancellationToken)
-            .WithCancellation(cancellationToken))
-        {
-            double sample = convert(rawSample.Span);
-            yield return new AudioNormalizedPacket(channelId, sample, offset, isEof);
+            ArrayPool<byte>.Shared.Return(output);
+            if (!direct)
+            {
+                ArrayPool<byte>.Shared.Return(sample);
+            }
         }
     }
 
     /// <summary>
-    /// Читает нормализованные float-сэмплы [-1.0, 1.0] — путь для DSP без промежуточного double.
+    /// Внутренний чанковый ридер для Echo: тоже целыми кадрами, но сразу в
+    /// нормализованные float и с обоими каналами в interleaved-порядке.
     /// </summary>
-    /// <remarks>
-    /// Возвращаемый сэмпл — значение, а не ссылка на буфер, поэтому <c>allowBufferReuse</c>
-    /// здесь не нужен: внутренние буферы переиспользуются, а пакет переживает следующую итерацию.
-    /// </remarks>
-    public async IAsyncEnumerable<AudioFloatPacket> ReadFloatSamplesAsync(
-        TimeRange? cutRange = null,
+    internal async IAsyncEnumerable<ReadOnlyMemory<float>> ReadInterleavedFloatChunksAsync(
+        int framesPerBatch,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(framesPerBatch);
+
         WavHeader header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
+        if (header.NumChannels != 2)
+            throw new NotSupportedException($"Expected stereo WAV, found {header.NumChannels} channel(s).");
+
+        int frameSize = header.BlockAlign;
+        int sampleSize = header.SampleSize;
         Func<ReadOnlySpan<byte>, float> convert = header.GetNormalizedFloatConverter();
 
-        await foreach (var (channelId, rawSample, offset, isEof) in
-            ReadSamplesPerChannelAsync(cutRange, allowBufferReuse: true, cancellationToken: cancellationToken)
-            .WithCancellation(cancellationToken))
-        {
-            yield return new AudioFloatPacket(channelId, convert(rawSample.Span), offset, isEof);
-        }
-    }
+        long dataSize = header.ResolveDataSize();
+        long remaining = dataSize <= 0 ? long.MaxValue : dataSize;
 
-    /// <summary>
-    /// Конвертирует в целевой аудиоформат
-    /// </summary>
-    public async IAsyncEnumerable<AudioPacket> ConvertToFormatAsync(
-        AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
-        TimeRange? cutRange = null,
-        bool allowBufferReuse = true,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        int bytesPerSample = targetFormat.GetBytesPerSample();
-
-        var buffer = ArrayPool<byte>.Shared.Rent(bytesPerSample);
-        try
-        {
-            var convert = SampleConverter.GetConverter(targetFormat);
-
-            await foreach (var (channelId, sample, offset, isEof) in
-                ReadDoubleSamplesAsync(cutRange, allowBufferReuse, cancellationToken)
-                .WithCancellation(cancellationToken))
-            {
-                ReadOnlyMemory<byte> result = convert(sample, buffer.AsMemory()[..bytesPerSample]);
-                // При allowBufferReuse=true все пакеты используют ОДИН внутренний буфер!
-                var chunk = allowBufferReuse ? result : result.ToArray();
-                yield return new AudioPacket(channelId, chunk, offset, isEof);
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    /// <summary>
-    /// Читает пакеты сэмплов по каналам
-    /// </summary>
-    /// <remarks>
-    /// Для потоковой обработки или воспроизведения
-    /// </remarks>
-    /// <param name="targetFormat">The audio encoding of the produced samples.</param>
-    /// <param name="cutRange">Optional time range to read; the whole file is read when <c>null</c>.</param>
-    /// <param name="samplesPerBatch">The number of samples per emitted batch.</param>
-    /// <param name="allowBufferReuse">
-    /// Если true (по умолчанию) — каждый пакет канала ссылается на пулированный буфер этого
-    /// канала, который перезаписывается следующей порцией того же канала. Данные нужно
-    /// скопировать (или обработать) до следующего <c>MoveNextAsync</c>.
-    /// Если false — пакеты независимы и переживают следующую итерацию.
-    /// </param>
-    /// <param name="cancellationToken">A token to cancel the enumeration.</param>
-    public async IAsyncEnumerable<AudioPacket> ReadStreamableChunksAsync(
-        AudioEncoding targetFormat = AudioEncoding.Pcm16BitSigned,
-        TimeRange? cutRange = null,
-        int samplesPerBatch = 1024,
-        bool allowBufferReuse = true,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
-    {
-        int bytesPerSample = targetFormat.GetBytesPerSample();
-
-        // Выравниваем до кратного 16,32... bytesPerSample
-        int alignedSize = Math.Max(bytesPerSample, (samplesPerBatch / bytesPerSample) * bytesPerSample);
-
-        // Инициализируем буферы по количеству каналов
-        var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
-        int channelCount = header.NumChannels;
-
-        var channelBuffers = new IMemoryOwner<byte>[channelCount];
+        float[] output = ArrayPool<float>.Shared.Rent(framesPerBatch * 2);
+        byte[] sample = ArrayPool<byte>.Shared.Rent(sampleSize);
 
         try
         {
-            var positions = new int[channelCount];
-            var lastOffsets = new long[channelCount];
+            int framesInChunk = 0;
+            bool eof = false;
 
-            for (int i = 0; i < channelCount; i++)
+            while (!eof)
             {
-                channelBuffers[i] = MemoryPool<byte>.Shared.Rent(alignedSize);
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            // allowBufferReuse: true — пакеты из ConvertToFormatAsync ссылаются на ОДИН внутренний
-            // буфер, но мы синхронно копируем каждый сэмпл в channelBuffers до следующего MoveNextAsync,
-            // поэтому переиспользование безопасно и убирает одну небольшую аллокацию на каждый сэмпл
-            // (раньше здесь был ToArray() на каждый сэмпл — лишний мусор в GC).
-            await foreach (var (channelId, sample, position, isEof) in ConvertToFormatAsync(
-                targetFormat,
-                cutRange,
-                allowBufferReuse: true,
-                cancellationToken: cancellationToken)
-                .WithCancellation(cancellationToken)
-                .ConfigureAwait(false))
-            {
-                lastOffsets[channelId] = position;
+                ReadResult result = await _reader
+                    .ReadAtLeastAsync(frameSize, cancellationToken)
+                    .ConfigureAwait(false);
+                ReadOnlySequence<byte> buffer = result.Buffer;
+                SequencePosition consumed = buffer.Start;
 
-                // Копируем семплы в соответствующий канал
-                var buffer = channelBuffers[channelId].Memory;
-                ref int pos = ref positions[channelId];
-                int available = alignedSize - pos;
-                int copyLength = Math.Min(sample.Length, available);
-
-                sample[..copyLength].CopyTo(buffer[pos..]);
-                pos += copyLength;
-
-                // Если порция заполнена или конец файла — отправляем
-                if (pos == alignedSize || isEof)
+                try
                 {
-                    var result = buffer[..pos];
+                    while (buffer.Length >= frameSize
+                           && framesInChunk < framesPerBatch
+                           && remaining > 0)
+                    {
+                        ReadOnlySequence<byte> frame = buffer.Slice(0, frameSize);
 
-                    var chunk = allowBufferReuse ? result : result.ToArray();
+                        for (int channel = 0; channel < 2; channel++)
+                        {
+                            frame.Slice(channel * sampleSize, sampleSize).CopyTo(sample);
+                            output[framesInChunk * 2 + channel] = convert(sample.AsSpan(0, sampleSize));
+                        }
 
-                    yield return new(channelId, chunk, position, isEof);
-                    positions[channelId] = 0;
+                        buffer = buffer.Slice(frameSize);
+                        consumed = buffer.Start;
+                        if (remaining != long.MaxValue)
+                        {
+                            remaining -= frameSize;
+                        }
+
+                        framesInChunk++;
+                    }
+
+                    eof = remaining <= 0 || (result.IsCompleted && buffer.Length < frameSize);
+
+                    if (framesInChunk > 0 && (framesInChunk == framesPerBatch || eof))
+                    {
+                        yield return output.AsMemory(0, framesInChunk * 2);
+                        framesInChunk = 0;
+                    }
                 }
-            }
-
-            // Отправляем оставшиеся данные для всех каналов, если они есть
-            for (int channelId = 0; channelId < channelCount; channelId++)
-            {
-                int remaining = positions[channelId];
-                if (remaining > 0)
+                finally
                 {
-                    var result = channelBuffers[channelId].Memory[..remaining];
-                    var chunk = allowBufferReuse ? result : result.ToArray();
-
-                    yield return new AudioPacket(channelId, chunk, lastOffsets[channelId], true);
+                    _reader.AdvanceTo(consumed, buffer.End);
                 }
             }
         }
         finally
         {
-            foreach (IMemoryOwner<byte> buffer in channelBuffers)
-            {
-                buffer?.Dispose();
-            }
+            ArrayPool<float>.Shared.Return(output);
+            ArrayPool<byte>.Shared.Return(sample);
         }
     }
-
-    private async Task<Func<ReadOnlySpan<byte>, double>> GetNormalizedConverterAsync(CancellationToken cancellationToken)
-    {
-        var header = await GetHeaderAsync(cancellationToken).ConfigureAwait(false);
-        return header.GetNormalizedConverter();
-    }
-
 
     private void EnsureDataSize(WavHeader header)
     {

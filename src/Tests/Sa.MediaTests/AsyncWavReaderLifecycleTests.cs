@@ -98,22 +98,23 @@ public sealed class AsyncWavReaderLifecycleTests
         Assert.Equal(4000u * 4, header.DataSize);
     }
 
+    // TC-4.1 | F-11
     [Fact]
-    public async Task ReadSamplesPerChannel_StreamingWav_ReadsAllSamples()
+    public async Task ReadChannelChunks_StreamingWav_ReadsAllSamples()
     {
         using TempDirectory directory = new();
         string path = WavTestData.CreateStreamingStereo(directory.Path, 1000, -1000, frames: 8000);
 
         await using AsyncWavReader reader = AsyncWavReader.CreateFromFile(path);
 
-        long count = 0;
-        await foreach (AudioPacket _ in reader
-            .ReadSamplesPerChannelAsync(cancellationToken: TestContext.Current.CancellationToken)
+        long bytes = 0;
+        await foreach (AudioChunk chunk in reader
+            .ReadChannelChunksAsync(0, 1024, cancellationToken: TestContext.Current.CancellationToken)
             .WithCancellation(TestContext.Current.CancellationToken))
         {
-            count++;
+            bytes += chunk.Samples.Length;
         }
 
-        Assert.Equal(8000L * 2, count);
+        Assert.Equal(8000L * 2, bytes); // 8000 сэмплов по 2 байта
     }
 }
