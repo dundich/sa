@@ -52,19 +52,17 @@ public class PartitionAsJobTests(PartitionAsJobTests.Fixture fixture)
     [Fact]
     public async Task MigrateAsJobTest()
     {
-        Console.WriteLine(fixture.ConnectionString);
+        CancellationToken ct = TestContext.Current.CancellationToken;
 
         int i = await fixture.ServiceProvider
-            .GetRequiredService<IScheduler>().StartAsync(CancellationToken.None);
+            .GetRequiredService<IScheduler>().StartAsync(ct);
         Assert.True(i > 0);
 
-        await Task.Delay(800, TestContext.Current.CancellationToken);
-
-        var list = await Sub.GetPartsFromDate(
-            "customer",
-            StartOfDay(DateTimeOffset.Now),
-            TestContext.Current.CancellationToken);
-
-        Assert.NotEmpty(list);
+        // The job runs on the scheduler's thread: wait for the partitions it creates instead of
+        // sleeping for a hard-coded 800 ms (which flakes on a loaded machine).
+        await AwaitHelper.UntilTrueAsync(
+            async () => (await Sub.GetPartsFromDate("customer", StartOfDay(DateTimeOffset.Now), ct)).Count > 0,
+            TimeSpan.FromSeconds(30),
+            ct);
     }
 }

@@ -288,6 +288,25 @@ public sealed class KeyedRegistrationTests
         Assert.Equal("shared", sp.GetRequiredKeyedService<ISettingsBuilder>("two").DefaultSchema);
     }
 
+    [Fact]
+    public void DefaultSchema_WithoutAUsableDataSource_FallsBackToPublic()
+    {
+        // The keyless registration always registers a default data source; when its connection string
+        // is empty the options validator refuses it, and the module treats exactly that as "not
+        // configured yet" (unit tests and design-time tooling run this way). The marker is a wording
+        // in the other package, so this test pins the fallback: if it changes, this test fails instead
+        // of every table silently moving into a schema nobody configured.
+        ServiceCollection services = CreateServices(withDefaultDataSource: false);
+
+        services.AddSaPartitional((_, builder) => builder.AddSchema(schema => schema
+            .AddTable("t_default", "id bigint NOT NULL", "created_at bigint NOT NULL")
+            .PartByRange(PgPartBy.Day)));
+
+        using ServiceProvider sp = services.BuildServiceProvider();
+
+        Assert.Equal("public", sp.GetRequiredService<ISettingsBuilder>().DefaultSchema);
+    }
+
     // ---------- key validation ----------
 
     [Fact]

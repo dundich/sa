@@ -118,7 +118,7 @@ emitted raw). The range column `created_at` is not declared in this example, so 
 ## Adopting an Existing Plain Table
 
 An existing ordinary table can be brought under the library with `AdoptTable`. It is converted on
-the first `Migrate`/`EnsureParts` call, once, in a single transaction:
+the first `MigrateAsync`/`EnsurePartsAsync` call, once, in a single transaction:
 
 ```csharp
 schema.AdoptTable("orders",
@@ -146,7 +146,10 @@ Rejected cases:
 - the table is missing;
 - the table is already partitioned (the library does not take over partitions it did not create);
 - the declared columns differ from the live table;
-- incoming foreign keys or dependent views exist — after the rename they would point at the backup.
+- incoming foreign keys or dependent views exist — after the rename they would point at the backup;
+- the rows would need more than 1000 partitions (`distinct list values x range periods`), for
+  example when the range column holds Unix milliseconds; the conversion stops before creating
+  anything.
 
 The backup is kept after a successful conversion. Indexes, triggers and constraints other than the
 generated primary key also stay on the backup, so they have to be re-created for the root (or added
@@ -212,14 +215,14 @@ simply leaves the class defaults and the code settings in place.
 |---|---|---|
 | `ForwardDays` | `2` | How many calendar days to pre-create on each run, starting with today (1..3660) |
 | `AsBackgroundJob` | `false` | Run as a hosted background service |
-| `ExecutionInterval` | `4h + jitter` | Interval between runs (adds 1–59 min random jitter) |
+| `ExecutionInterval` | `4h + jitter` | Interval between runs (adds 0–59 min random jitter) |
 | `WaitMigrationTimeout` | `3s` | Max wait for the migration lock; a tick that misses it is skipped and returns `-1` |
 | `RunTimeout` | `10s` | Deadline of a single run, counted from the moment it took the lock |
 | `MigrationJobName` | `"Migration job"` | Display name in the job scheduler |
 
 One run at a time, and `-1` means "not completed" — deadline elapsed or cancelled, not "a negative number of
 partitions". A started background run is bounded by `RunTimeout` and is not interrupted by the caller's token:
-the generated DDL is idempotent, so finishing is cheaper than restarting. `Migrate(dates)` is an explicit
+the generated DDL is idempotent, so finishing is cheaper than restarting. `MigrateAsync(dates)` is an explicit
 request, so it waits for the lock as long as it takes and does honour the caller's token.
 
 ### Cleanup Schedule (`PartCleanupScheduleSettings`)
@@ -229,7 +232,7 @@ request, so it waits for the lock as long as it takes and does honour the caller
 | `DropPartsAfterRetention` | `30 days` | Partitions older than this are dropped |
 | `CleanupMode` | `Drop` | `Drop` deletes the expired partition, `Archive` moves it into `ArchiveSchemaName` |
 | `ArchiveSchemaName` | `archive` | Archive target; the schema is created when missing |
-| `ArchiveCollisionMode` | `Fail` | What to do when the archive already holds that name: `Fail` logs and leaves the part attached, `RenameExisting` moves the older copy (and its indexes) to `{name}{sep}prev$N` |
+| `ArchiveCollisionMode` | `Fail` | What to do when the archive already holds that name: `Fail` logs and leaves the part in place (attached, or already detached by an interrupted run), `RenameExisting` moves the older copy (and its indexes) to `{name}{sep}prev$N` |
 | `PruneEmptyListParts` | `false` | Also drop list-level partitions whose whole subtree is empty and whose value the migration does not declare |
 | `AsBackgroundJob` | `false` | Run as a hosted background service |
 | `ExecutionInterval` | `4h + jitter` | Interval between cleanup runs |
@@ -244,10 +247,10 @@ request, so it waits for the lock as long as it takes and does honour the caller
 
 The cache avoids repeated catalog queries — the metadata comes from the cache table, not from `pg_class`. Concurrent
 readers share a single load, a failing load is evicted so the next call re-queries instead of replaying the
-failure, and the cache is invalidated automatically when a partition is created at runtime via `EnsureParts`.
+failure, and the cache is invalidated automatically when a partition is created at runtime via `EnsurePartsAsync`.
 
-The background jobs drop the whole snapshot after every run. A manual `IMigrationService.Migrate(dates)` or
-`IPartCleanupService.Clean(...)` call does **not** — the process keeps the old view for up to `CacheTtl`.
+The background jobs drop the whole snapshot after every run. A manual `IMigrationService.MigrateAsync(dates)` or
+`IPartCleanupService.CleanAsync(...)` call does **not** — the process keeps the old view for up to `CacheTtl`.
 
 ---
 

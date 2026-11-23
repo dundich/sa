@@ -420,7 +420,7 @@ By default migration and cleanup run as background jobs via `Sa.Schedule`. You c
 ```csharp
 // The outbox migration service lives in the outbox's own DI scope ("outbox").
 var migrationService = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
+bool ok = await migrationService.WaitMigrationAsync(TimeSpan.FromSeconds(30), ct);
 
 // Or check current state
 if (!migrationService.OnMigrated.IsCancellationRequested)

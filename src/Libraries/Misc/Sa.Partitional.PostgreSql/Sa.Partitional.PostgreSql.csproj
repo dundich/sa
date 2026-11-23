@@ -5,10 +5,6 @@
 		<PackageTags>postgresql partitioning tables maintenance</PackageTags>
 	</PropertyGroup>
 
-	<PropertyGroup>
-		<NoWarn>CS8602;</NoWarn>
-	</PropertyGroup>
-
 	<ItemGroup>
 		<ProjectReference Include="..\Sa.Schedule\Sa.Schedule.csproj" />
 		<ProjectReference Include="..\..\Data\Sa.Data.PostgreSql\Sa.Data.PostgreSql.csproj" />

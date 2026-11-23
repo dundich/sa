@@ -69,4 +69,16 @@ public class EnumerationTests
 
         Assert.Equal(ids.Length, ids.Distinct().Count());
     }
+
+    [Fact]
+    public void CompareTo_Null_SortsBeforeAnyInstance()
+    {
+        // IComparable<T> requires null to sort before every instance; the implementation used to
+        // dereference it, so sorting a list that contained one ended in a NullReferenceException.
+        Part? none = null;
+
+        Assert.Equal(1, Part.Root.CompareTo(none));
+        Assert.True(Part.Root > none);
+        Assert.False(Part.Root < none);
+    }
 }

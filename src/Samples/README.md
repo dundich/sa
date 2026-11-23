@@ -132,7 +132,7 @@ Demonstrates declarative PostgreSQL table partitioning with scheduled migrations
 
 1. Configures a `customer` table partitioned by list (`country`, `city`).
 2. Defines migration schedules for RU (Moscow, Samara), USA (Alabama, New York), FR (Paris, Lyon, Bordeaux).
-3. Runs `partition.Migrate()` to create physical partitions.
+3. Runs `partition.MigrateAsync()` to create physical partitions.
 4. Lists created partitions for the next 3 days.
 
 ### Run

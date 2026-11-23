@@ -118,34 +118,51 @@ public abstract record Enumeration<[DynamicallyAccessedMembers(DynamicallyAccess
     /// <summary>
     /// Compares this instance to another enumeration value by their integer <see cref="Id"/>.
     /// </summary>
-    /// <param name="other">The other enumeration value to compare with.</param>
-    /// <returns>A signed integer indicating the relative order.</returns>
+    /// <param name="other">The other enumeration value, or <c>null</c>.</param>
+    /// <returns>
+    /// A signed integer indicating the relative order. <c>null</c> sorts before any instance, as the
+    /// <see cref="IComparable{T}"/> contract requires: it used to be dereferenced, so sorting a list
+    /// that contained one ended in a <see cref="NullReferenceException"/>.
+    /// </returns>
     [DebuggerStepThrough]
-    public int CompareTo(T? other) => Id.CompareTo(other!.Id);
+    public int CompareTo(T? other) => Compare(this, other);
 
-    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>; <c>null</c> sorts first.</summary>
     /// <param name="left">The left value.</param>
     /// <param name="right">The right value.</param>
     /// <returns><see langword="true"/> when <paramref name="left"/> sorts before <paramref name="right"/>.</returns>
-    public static bool operator <(Enumeration<T> left, Enumeration<T> right) => left.Id < right.Id;
+    public static bool operator <(Enumeration<T>? left, Enumeration<T>? right) => Compare(left, right) < 0;
 
-    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>; <c>null</c> sorts first.</summary>
     /// <param name="left">The left value.</param>
     /// <param name="right">The right value.</param>
     /// <returns><see langword="true"/> when <paramref name="left"/> sorts before or equal to <paramref name="right"/>.</returns>
-    public static bool operator <=(Enumeration<T> left, Enumeration<T> right) => left.Id <= right.Id;
+    public static bool operator <=(Enumeration<T>? left, Enumeration<T>? right) => Compare(left, right) <= 0;
 
-    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>; <c>null</c> sorts first.</summary>
     /// <param name="left">The left value.</param>
     /// <param name="right">The right value.</param>
     /// <returns><see langword="true"/> when <paramref name="left"/> sorts after <paramref name="right"/>.</returns>
-    public static bool operator >(Enumeration<T> left, Enumeration<T> right) => left.Id > right.Id;
+    public static bool operator >(Enumeration<T>? left, Enumeration<T>? right) => Compare(left, right) > 0;
 
-    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>.</summary>
+    /// <summary>Orders two enumeration values by their integer <see cref="Id"/>; <c>null</c> sorts first.</summary>
     /// <param name="left">The left value.</param>
     /// <param name="right">The right value.</param>
     /// <returns><see langword="true"/> when <paramref name="left"/> sorts after or equal to <paramref name="right"/>.</returns>
-    public static bool operator >=(Enumeration<T> left, Enumeration<T> right) => left.Id >= right.Id;
+    public static bool operator >=(Enumeration<T>? left, Enumeration<T>? right) => Compare(left, right) >= 0;
+
+    /// <summary>
+    /// Single ordering implementation behind <see cref="CompareTo"/> and the comparison operators, so
+    /// the null rule cannot drift between them.
+    /// </summary>
+    private static int Compare(Enumeration<T>? left, Enumeration<T>? right)
+    {
+        if (left is null) return right is null ? 0 : -1;
+
+        if (right is null) return 1;
+
+        return left.Id.CompareTo(right.Id);
+    }
 
     /// <summary>
     /// Returns the display <see cref="Name"/> of this enumeration value.

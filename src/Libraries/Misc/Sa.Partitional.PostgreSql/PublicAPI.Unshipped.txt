@@ -1,1 +1,5 @@
 #nullable enable
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator <(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator <=(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator >(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator >=(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool

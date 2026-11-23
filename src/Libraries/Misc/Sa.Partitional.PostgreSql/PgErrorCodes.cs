@@ -8,6 +8,15 @@ namespace Sa.Partitional.PostgreSql;
 /// </summary>
 internal static class PgErrorCodes
 {
+    /// <summary>
+    /// Reports whether the failure means "there is no such table (or schema) yet".
+    /// </summary>
+    /// <remarks>
+    /// <see cref="PostgresErrorCodes.InvalidSchemaName"/> is included on purpose: a table declared in a
+    /// schema that does not exist cannot be queried either, and the read paths treat both as "nothing
+    /// cached yet" (the migration creates the schema itself). DDL paths still fail loudly, so a typo
+    /// in a schema name is reported where it can be acted on.
+    /// </remarks>
     public static bool IsUndefinedTable(PostgresException ex) =>
         ex.SqlState == PostgresErrorCodes.UndefinedTable
         || ex.SqlState == PostgresErrorCodes.InvalidSchemaName;

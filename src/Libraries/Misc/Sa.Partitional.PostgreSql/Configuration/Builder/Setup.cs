@@ -89,6 +89,19 @@ internal static class Setup
         }
     }
 
+    /// <summary>
+    /// The data-source options validator's wording for "the connection string is still empty".
+    /// </summary>
+    /// <remarks>
+    /// This is a deliberate, narrow coupling to <c>Sa.Data.PostgreSql</c>: that validator reports
+    /// "not configured yet" only as text, and reading the options through the pipeline validates them,
+    /// so there is no typed signal to test against. The fallback is pinned by
+    /// <c>KeyedRegistrationTests.DefaultSchema_WithoutAUsableDataSource_FallsBackToPublic</c>, so a
+    /// wording change in the other package fails this build instead of silently moving every table
+    /// into a schema nobody configured.
+    /// </remarks>
+    private const string MissingConnectionStringMarker = "ConnectionString cannot be empty";
+
     private static bool IsMissingConnectionString(string failure)
-        => failure.Contains("ConnectionString cannot be empty", StringComparison.Ordinal);
+        => failure.Contains(MissingConnectionStringMarker, StringComparison.Ordinal);
 }

@@ -419,7 +419,7 @@ consumer-ом в `Error(...)`.
 ```csharp
 // Сервис миграции outbox живёт в собственном DI-скопе outbox ("outbox").
 var migrationService = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-bool ok = await migrationService.WaitMigration(TimeSpan.FromSeconds(30), ct);
+bool ok = await migrationService.WaitMigrationAsync(TimeSpan.FromSeconds(30), ct);
 
 // Или проверить состояние
 if (!migrationService.OnMigrated.IsCancellationRequested)

@@ -327,4 +327,23 @@ public class PartMigrationServiceTests
         // turn a run that actually finished into a reported failure.
         Assert.Equal(1, await run);
     }
+
+    [Fact]
+    public async Task WaitMigration_AfterDispose_ReturnsFalse_InsteadOfThrowing()
+    {
+        FakeRepository repository = new();
+        PartMigrationService service = Create(repository);
+        IMigrationService sut = service;
+
+        service.Dispose();
+
+        // The host disposes the service on its way out. A waiter that is still around must get a
+        // negative answer; the one-shot signal used to hand out a token of a *disposed* source, which
+        // threw ObjectDisposedException as soon as WaitMigrationAsync registered on it.
+        bool completed = await sut.WaitMigrationAsync(
+            TimeSpan.Zero,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(completed);
+    }
 }

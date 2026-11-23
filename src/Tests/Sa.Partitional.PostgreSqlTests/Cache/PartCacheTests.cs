@@ -85,7 +85,6 @@ public class PartCacheTests(PartCacheTests.Fixture fixture) : IClassFixture<Part
     [Fact]
     public async Task InCache_TableNotExists_ReturnsFalse()
     {
-        Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
 
         bool actual = await PartCache.InCacheAsync("different_table", DateTimeOffset.Now, ["p1", 145], TestContext.Current.CancellationToken);
         // Assert

@@ -64,7 +64,7 @@ The library gathers everything needed for partitioning into three setting types,
 - **Guard against gaps.** A *gap* is an INSERT into a partition that does not yet exist — either the insert fails, or (with [`WithDefaultPartition()`](#fluent-builder-api)) it lands in the catch-all. Migration creates partitions ahead of time — for several days/months forward (`ForwardDays`) — so traffic never falls into a void. [`MigrationScheduleSettings`](#migration)
 - **Auto-cleanup** — moves old partitions out of circulation: [`Drop`](#cleanup-mode-drop) (delete) or [`Archive`](#cleanup-mode-archive) (move into an archive schema), with an opt-in prune of empty list branches. [`PartCleanupScheduleSettings`](#cleanup), [`IPartCleanupService`](#api-cleanup)
 - **In-memory cache** of partition metadata — a lookup never hits the database. [`PartCacheSettings`](#partcache)
-- **Programmatic control** — [`IPartitionManager`](#api-manager): `Migrate`, `EnsureParts`, manual window control.
+- **Programmatic control** — [`IPartitionManager`](#api-manager): `MigrateAsync`, `EnsurePartsAsync`, manual window control.
 - **Adoption of an existing table** — [`AdoptTable`](#adopting-an-existing-plain-table) converts a plain table with data once and continues managing its partitions.
 
 ### Fluent Builder
@@ -280,11 +280,15 @@ Requirements and limits:
   transaction after the row-count check;
 - one table must belong to a single module: two modules adopting the same table would fight over
   its partitions;
-- the conversion runs inside the migration's `RunTimeout`; raise it for large tables.
+- the conversion runs inside the migration's `RunTimeout`; raise it for large tables;
+- one conversion creates at most **1000** partitions (`distinct list values x range periods`)
+  and stops before creating anything when the data would need more — a range column holding
+  Unix *milliseconds*, or a list key with many distinct values over a long period, is rejected
+  instead of turning the first migration into a mass-DDL.
 
 Repeated runs are no-ops: once the root is partitioned and the cache table exists, the table is
-treated as managed and old methods (`Migrate`, `EnsureParts`, `Clean`, `Archive`) keep working as
-usual.
+treated as managed and the public services (`MigrateAsync`, `EnsurePartsAsync`, `CleanAsync`, the
+archive/drop overloads) keep working as usual.
 
 ---
 
@@ -390,7 +394,7 @@ Background job that retires old partitions.
 | [`DropPartsAfterRetention`](#cleanup) | `30 days` | Age threshold after which a partition is retired. For event sourcing often 90–365 days; for outbox messages — 7–30 days. |
 | [`CleanupMode`](#cleanup) | `Drop` | What to do with an expired partition: [`Drop`](#cleanup-mode-drop) — delete entirely, [`Archive`](#cleanup-mode-archive) — move into an archive schema. |
 | [`ArchiveSchemaName`](#cleanup) | `"archive"` | Schema where partitions are moved when `CleanupMode = Archive`. Ignored in `Drop` mode. Tables keep their name — name collisions within the same schema cause errors. |
-| [`ArchiveCollisionMode`](#cleanup) | `Fail` | What to do when the archive schema already holds that name: [`Fail`](#cleanup-mode-archive) leaves the live partition attached and logs the clash, `RenameExisting` moves the older archived copy to `{name}{sep}prev$N` and archives the new one under the canonical name. |
+| [`ArchiveCollisionMode`](#cleanup) | `Fail` | What to do when the archive schema already holds that name: [`Fail`](#cleanup-mode-archive) leaves the live partition in place and logs the clash, `RenameExisting` moves the older archived copy to `{name}{sep}prev$N` and archives the new one under the canonical name. |
 | [`PruneEmptyListParts`](#cleanup) | `false` | Also drop list-level partitions whose whole subtree holds no rows (and whose value is not declared by the migration). |
 | [`AsBackgroundJob`](#cleanup) | `false` | Run as hosted service or only manually via [`IPartCleanupService`](#api-cleanup)? |
 | [`ExecutionInterval`](#cleanup) | `~4h ± jitter` | Interval between cleanup ticks. |
@@ -415,11 +419,11 @@ Standard behaviour — physically removes the partition via `DROP TABLE`. Data i
 
 Moves the partition to another schema (`ALTER TABLE ... SET SCHEMA "archive"`). The table is preserved but stops participating in queries against the main schema. The archive schema is created automatically (`CREATE SCHEMA IF NOT EXISTS`); a database role without `CREATE` on the database has to create it in advance.
 
-Tables keep their name, so an archived copy and a later partition of the same window collide: if data is written into a window that was already archived, the leaf is re-created in the live schema (and becomes visible to cleanup again), and the second archive pass finds the name taken. With the default `ArchiveCollisionMode = Fail` the pass logs `EventId 410` and leaves the live partition attached instead of detaching it and failing on the name — rename or drop the stale archived copy by hand. With `ArchiveCollisionMode = RenameExisting` the library moves the older archived copy (and its indexes) to `{name}{separator}prev$1`, then `$2`, …, and archives the new partition under the canonical name, so a query against `archive."{name}"` always sees the most recent data (`EventId 411` records the rename).
+Tables keep their name, so an archived copy and a later partition of the same window collide: if data is written into a window that was already archived, the leaf is re-created in the live schema (and becomes visible to cleanup again), and the second archive pass finds the name taken. With the default `ArchiveCollisionMode = Fail` the pass logs `EventId 410` and leaves the live partition in place (attached, or already detached by an interrupted run) instead of detaching it and failing on the name — rename or drop the stale archived copy by hand. With `ArchiveCollisionMode = RenameExisting` the library moves the older archived copy (and its indexes) to `{name}{separator}prev$1`, then `$2`, …, and archives the new partition under the canonical name, so a query against `archive."{name}"` always sees the most recent data (`EventId 411` records the rename).
 
 #### Empty list partitions
 
-Cleanup retires **range leaves** only; a tenant (or any other list value) that stopped being used keeps its intermediate `{table}{separator}{value}` partition and its `def$` child forever. `PruneEmptyListParts = true` additionally drops such a list-level partition when nothing in its subtree holds a row **and** its value is not declared by the table's migration support (so the next migration tick does not re-create it). It is off by default: dropping a structural partition that a writer may target is a decision for the application.
+Cleanup retires **range leaves** only; a tenant (or any other list value) that stopped being used keeps its intermediate `{table}{separator}{value}` partition and its `def$` child forever. `PruneEmptyListParts = true` additionally drops such a list-level partition when nothing in its subtree holds a row **and** its value is not declared by the table's migration support (so the next migration tick does not re-create it). A declared branch renamed by `WithLongPartitionName` is recognized through the callback and treated as declared. It is off by default: dropping a structural partition that a writer may target is a decision for the application.
 
 ---
 
@@ -614,15 +618,15 @@ Main entry point for programmatic partition management:
 ```csharp
 public interface IPartitionManager
 {
-    Task<int> Migrate(CancellationToken ct = default);
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken ct = default);
-    Task EnsureParts(string tableName, DateTimeOffset date, StrOrNum[] partValues, CancellationToken ct = default);
+    Task<int> MigrateAsync(CancellationToken ct = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken ct = default);
+    Task EnsurePartsAsync(string tableName, DateTimeOffset periodStart, StrOrNum[] partValues, CancellationToken ct = default);
 }
 ```
 
-- [`Migrate()`](#api-manager) — pre-create all missing partitions for today + the forward window
-- [`Migrate(dates[])`](#api-manager) — pre-create only for specific dates
-- [`EnsureParts()`](#api-manager) — guarantee a specific partition exists (creates it if missing). It completes when the
+- [`MigrateAsync()`](#api-manager) — pre-create all missing partitions for today + the forward window
+- [`MigrateAsync(dates[])`](#api-manager) — pre-create only for specific dates
+- [`EnsurePartsAsync()`](#api-manager) — guarantee a specific partition exists (creates it if missing). It completes when the
   partition exists and reports failures as exceptions; it does **not** return a bool, because a cache miss is not a failure
 
 ### <a name="api-migration"></a>IMigrationService
@@ -633,13 +637,13 @@ The service behind `IPartitionManager`; resolve directly to wait for an in-fligh
 public interface IMigrationService
 {
     CancellationToken OnMigrated { get; }
-    Task<int> Migrate(CancellationToken ct = default);
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken ct = default);
-    Task<bool> WaitMigration(TimeSpan timeout, CancellationToken ct = default);  // true = completed, timeout/cancel = false
+    Task<int> MigrateAsync(CancellationToken ct = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken ct = default);
+    Task<bool> WaitMigrationAsync(TimeSpan timeout, CancellationToken ct = default);  // true = completed, timeout/cancel = false
 }
 ```
 
-- **One run at a time.** `Migrate()` waits for the migration lock at most `WaitMigrationTimeout` and then *skips* the tick (returns `-1`) instead of queueing. `Migrate(dates)` is an explicit request, so it waits indefinitely and also honours the caller's token.
+- **One run at a time.** `MigrateAsync()` waits for the migration lock at most `WaitMigrationTimeout` and then *skips* the tick (returns `-1`) instead of queueing. `MigrateAsync(dates)` is an explicit request, so it waits indefinitely and also honours the caller's token.
 - **`-1` means "not completed"** — deadline elapsed or cancelled, not "a negative number of partitions". Generated DDL is idempotent, so the next run finishes the remainder.
 - A **started background run** is bounded by `RunTimeout` and is not interrupted by the caller's token: DDL is idempotent, so finishing is cheaper than restarting.
 - `OnMigrated` is a **one-shot** signal — once a migration completes it stays triggered, answering "has a migration ever completed", not "is one running now".
@@ -649,12 +653,12 @@ public interface IMigrationService
 ```csharp
 public interface IPartCleanupService
 {
-    Task<int> Clean(CancellationToken ct = default);          // older than DropPartsAfterRetention
-    Task<int> Clean(DateTimeOffset toDate, CancellationToken ct = default);
+    Task<int> CleanAsync(CancellationToken ct = default);          // older than DropPartsAfterRetention
+    Task<int> CleanAsync(DateTimeOffset toDate, CancellationToken ct = default);
 }
 ```
 
-[`Clean`](#api-cleanup) retires partitions according to `PartCleanupScheduleSettings.CleanupMode` — `Drop` deletes them,
+[`CleanAsync`](#api-cleanup) retires partitions according to `PartCleanupScheduleSettings.CleanupMode` — `Drop` deletes them,
 `Archive` detaches them and moves them into `ArchiveSchemaName` (PostgreSQL 13+). Either way it does so **without
 invalidating the in-memory cache** — a call outside the background job leaves a stale snapshot for up to
 `PartCacheSettings.CacheTtl`. Rely on the scheduled job when the same process must see the change immediately.
@@ -738,8 +742,10 @@ breaks that down, reports how many bytes are over the limit, and names the lever
 | `WithPartTablePostfix("meta$")` | shrinks **only** the cache table name, not partition names |
 
 Practical rules: prefer numeric ids over long strings for list keys, keep table names short, and do
-not build deep list hierarchies from long values. The library never truncates a name silently — it
-fails with the byte breakdown instead.
+not build deep list hierarchies from long values. A name the *library derives itself* (the adoption
+backup `{table}{sep}backup$` and the archived-copy replacements `{name}{sep}prev$N`) is trimmed to
+make room for its own suffix; every name built from a user-declared table name and key values is
+never truncated silently — it fails with the byte breakdown instead.
 
 #### Overflow callback
 
@@ -775,7 +781,7 @@ schema.AddTable("orders", /* ... */)
 ## Behaviour Notes
 
 - **UTC everywhere.** Partition names, range boundaries and cache windows are computed from the UTC calendar, so two hosts in different time zones create the same partition for the same instant.
-- **Cache consistency.** Background jobs drop the whole snapshot after every run (unconditionally — a partial run could have created partitions too). A manual `Migrate(dates)` or `Clean(...)` call does not; `EnsureParts` invalidates the entry of its own table and remembers the partitions it ensured for `CacheTtl`, so a backdated write outside the snapshot window does not re-run the (idempotent) DDL on every call. The jobs' flush drops that memory as well.
+- **Cache consistency.** Background jobs drop the whole snapshot after every run (unconditionally — a partial run could have created partitions too). A manual `MigrateAsync(dates)` or `CleanAsync(...)` call does not; `EnsurePartsAsync` invalidates the entry of its own table and remembers the partitions it ensured for `CacheTtl`, so a backdated write outside the snapshot window does not re-run the (idempotent) DDL on every call. The jobs' flush drops that memory as well.
 - **Retries and serialization.** Both the read and write path of the repository go through the retry strategy of `Sa.Data.PostgreSql`, so a transient database failure does not reach the caller. DDL is additionally serialized **per module** (one `IPartRepository` per module): inside a module two partitions are never created concurrently, while two modules that share one data source are not serialized against each other — their partition names never overlap, so the only shared object is the `CREATE SCHEMA IF NOT EXISTS` / cache DDL, which is idempotent. The adoption pass is the exception: it runs inside its own transaction under a PostgreSQL advisory lock and does **not** go through the retry strategy, a transient failure there fails that migration run.
 - **Job error handling.** Only the expected stop (cancellation / timeout) is suppressed. A real failure of one table is logged (migration `EventId 104`, cleanup `EventId 207`) and the run continues with the remaining tables, so one broken table does not starve the others; the run as a whole then fails, is retried, and aborts *that* job — not the application.
 - **Fill factor.** Applied to date-range children only. When `WithFillFactor` was never called the clause is omitted and PostgreSQL applies its own default (100).

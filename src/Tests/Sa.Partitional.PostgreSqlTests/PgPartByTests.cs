@@ -117,18 +117,9 @@ public class PgPartByTests
     [InlineData("")]
     public void Month_ParseFmt_ReturnsNull_ForInvalidStrings(string input)
     {
-        try
-        {
-            // Act
-            var result = PgPartBy.Month.ParseFmt(input);
-
-            // Assert
-            Assert.Null(result);
-        }
-        catch
-        {
-            Assert.True(true);
-        }
+        // "y2023m13" passes the digit-shape regex, so the month range check is what has to reject it.
+        // This used to be wrapped in try/catch, which let a thrown exception count as success.
+        Assert.Null(PgPartBy.Month.ParseFmt(input));
     }
 
     [Fact]
@@ -171,18 +162,9 @@ public class PgPartByTests
     [InlineData("")]
     public void Year_ParseFmt_ReturnsNull_ForInvalidStrings(string input)
     {
-        try
-        {
-            // Act
-            var result = PgPartBy.Year.ParseFmt(input);
-
-            // Assert
-            Assert.Null(result);
-        }
-        catch
-        {
-            Assert.True(true);
-        }
+        // Same contract as the day/month variants: a shape-valid but unparseable name is a miss, and
+        // nothing here may swallow an exception.
+        Assert.Null(PgPartBy.Year.ParseFmt(input));
     }
 
     [Fact]

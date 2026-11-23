@@ -1,3 +1,4 @@
+using Sa.Partitional.PostgreSql.Configuration;
 using System.ComponentModel.DataAnnotations;
 
 namespace Sa.Partitional.PostgreSql;
@@ -58,11 +59,9 @@ public sealed class PartCleanupScheduleSettings
 
     /// <summary>
     /// Gets or sets the interval at which the cleanup job will be executed.
-    /// Default is set to every 4 hours, with a random additional delay of up to 59 minutes.
+    /// Default is 4 hours plus a random jitter of 0–59 minutes (evaluated once per settings instance).
     /// </summary>
-    public TimeSpan ExecutionInterval { get; set; } = TimeSpan
-        .FromHours(4)
-        .Add(TimeSpan.FromMinutes(Random.Shared.Next(1, 59)));
+    public TimeSpan ExecutionInterval { get; set; } = ExecutionIntervalDefault.Next();
 
     /// <summary>
     /// Gets or sets the initial delay before the cleanup job starts executing.

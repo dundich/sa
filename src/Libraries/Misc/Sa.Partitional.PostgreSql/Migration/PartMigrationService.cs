@@ -25,15 +25,24 @@ internal sealed partial class PartMigrationService(
     /// <summary>
     /// One-shot "a migration has completed" signal for <see cref="OnMigrated"/>.
     /// </summary>
+    /// <remarks>
+    /// Never disposed - see <see cref="Dispose"/>.
+    /// </remarks>
     private readonly CancellationTokenSource _migratedCts = new();
 
     public CancellationToken OnMigrated => _migratedCts.Token;
 
-    public void Dispose()
-    {
-        _migratedCts.Dispose();
-        _migrationLock.Dispose();
-    }
+    /// <summary>
+    /// Releases the run lock.
+    /// </summary>
+    /// <remarks>
+    /// The one-shot cancellation source is deliberately <b>not</b> disposed. <see cref="OnMigrated"/>
+    /// hands its token out and <c>WaitMigrationAsync</c> registers on it; a token of a disposed source
+    /// throws <see cref="ObjectDisposedException"/> as soon as it is registered on, which would turn an
+    /// orderly shutdown into a failure for whoever is still waiting for the signal. The source owns no
+    /// timer and no unmanaged resource, so leaving it to the GC is safe.
+    /// </remarks>
+    public void Dispose() => _migrationLock.Dispose();
 
     public async Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default)
     {
@@ -162,21 +171,13 @@ internal sealed partial class PartMigrationService(
     /// Raises the one-shot <see cref="OnMigrated"/> signal.
     /// </summary>
     /// <remarks>
-    /// A manual <see cref="MigrateAsync(CancellationToken)"/> can still be in flight when the host starts
-    /// shutting down and disposes this service, so the source may already be gone. That is the normal
-    /// end of a run, not a failure: an <see cref="ObjectDisposedException"/> here would otherwise
-    /// escape as a migration error and abort the job on the way out.
+    /// The source is never disposed (see <see cref="Dispose"/>), so this cannot fail: a manual
+    /// <see cref="MigrateAsync(CancellationToken)"/> finishing while the host shuts down is the normal
+    /// end of a run, not a migration error.
     /// </remarks>
     private void SignalMigrated()
     {
-        try
-        {
-            _migratedCts.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // The service was disposed while this run finished - nothing left to signal.
-        }
+        _migratedCts.Cancel();
     }
 
     [LoggerMessage(

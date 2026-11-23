@@ -15,6 +15,12 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
 {
     private const string ArchiveSchema = "archive_repair";
 
+    /// <summary>
+    /// 50 characters: with it the one-level parent name <c>repair_prune_long__{tenant}</c> is 69 bytes,
+    /// over the identifier limit, so <c>WithLongPartitionName</c> renames the parent too.
+    /// </summary>
+    private static readonly string LongTenant = new('t', 50);
+
     public class Fixture : PgDataSourceFixture<IPartRepository>
     {
         public Fixture()
@@ -36,6 +42,16 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
                         .PartByList("tenant")
                         .PartByRange(PgPartBy.Day)
                         .AddMigration(["kept"]);
+
+                    // A declared one-level branch whose *parent* name is over 63 bytes, so the
+                    // callback renames the parent as well (root 17 + sep 2 + tenant 50 > 63).
+                    schema.AddTable("repair_prune_long", "id INT NOT NULL", "tenant TEXT NOT NULL")
+                        .PartByList("tenant")
+                        .PartByRange(PgPartBy.Day)
+                        .AddMigration([LongTenant])
+                        .WithLongPartitionName(ctx => ctx.RangeSuffix is null
+                            ? $"{ctx.RootTableName}__h$parent"
+                            : $"{ctx.RootTableName}__h$leaf");
                 });
             })
             .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
@@ -164,5 +180,21 @@ public class PartCleanupRepairTests(PartCleanupRepairTests.Fixture fixture)
         Assert.True(await Exists("public.\"repair_prune__kept\""));
         Assert.False(await Exists("public.\"repair_prune__transient\""));
         Assert.True(await Exists("public.\"repair_prune__busy\""));
+    }
+
+    [Fact]
+    public async Task PruneEmptyListParts_LeavesARenamedDeclaredBranchAlone()
+    {
+        await Rep.MigrateAsync([Day], Ct);
+
+        Assert.True(await Exists("public.\"repair_prune_long__h$parent\""));
+
+        int pruned = await Rep.PruneEmptyListPartsAsync("repair_prune_long", Ct);
+
+        // The renamed parent cannot be parsed back into a value, so the value comparison does not
+        // recognize it. It used to be treated as an unknown (undeclared) branch and dropped once its
+        // subtree was empty - and re-created on the next migration tick, on every cleanup tick.
+        Assert.Equal(0, pruned);
+        Assert.True(await Exists("public.\"repair_prune_long__h$parent\""));
     }
 }

@@ -58,7 +58,6 @@ public class PgRepositoryTests(PgRepositoryTests.Fixture fixture) : IClassFixtur
     public async Task CreatePartTest()
     {
         var sql = $"SELECT count(*) FROM public.\"test_11__{PartPostfix}\";";
-        Console.WriteLine(fixture.ConnectionString, TestContext.Current.CancellationToken);
         await fixture.Sub.CreatePartAsync("test_11", DateTimeOffset.Now, ["some", 12], TestContext.Current.CancellationToken);
         int i = await fixture.DataSource.ExecuteReaderFirstAsync<int>(sql, TestContext.Current.CancellationToken);
         Assert.True(i > 0);

@@ -151,7 +151,9 @@ public interface IPartRepository
     /// intermediate partition and its <c>DEFAULT</c> child forever. A partition is dropped only when
     /// nothing in its subtree holds a row and its value path is not a prefix of a value the table's
     /// migration support reports (a declared branch is never pruned, so migration does not fight the
-    /// cleanup). Opt-in via <see cref="PartCleanupScheduleSettings.PruneEmptyListParts"/>.
+    /// cleanup). A declared branch renamed by <see cref="ITableBuilder.WithLongPartitionName"/> is
+    /// recognized through the callback and left alone as well. Opt-in via
+    /// <see cref="PartCleanupScheduleSettings.PruneEmptyListParts"/>.
     /// </remarks>
     /// <param name="tableName">The root table name.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>

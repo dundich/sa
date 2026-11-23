@@ -240,6 +240,19 @@ internal sealed partial class PartTableAdopter(
 
         List<DateTimeOffset> dates = BuildDateRange(settings, min.Value, max.Value);
 
+        // The guard above bounds the *range* dimension only; the list values multiply it. A table with
+        // 100 list values over 1000 ranges would still ask for 100 000 tables inside one transaction.
+        long planned = (long)partValues.Count * dates.Count;
+
+        if (planned > MaxPartitionsPerConversion)
+        {
+            throw new InvalidOperationException(
+                $"Table '{settings.FullName}' would need {planned} partitions "
+                + $"({partValues.Count} list value(s) x {dates.Count} range period(s)) to cover its "
+                + $"rows, which is over the {MaxPartitionsPerConversion} limit. Reduce the data set, or "
+                + "narrow the list-key combinations, before adopting the table.");
+        }
+
         int created = 0;
 
         foreach (StrOrNum[] values in partValues)
@@ -526,8 +539,8 @@ SELECT COALESCE((SELECT relkind::text FROM pg_class WHERE oid = to_regclass(@tab
                 => (long)number,
             _ => throw new InvalidOperationException(
                 $"Table '{tableName}' has a list partition column '{columnName}' of an unsupported type "
-                + $"({value.GetType().Name}). Supported are text, varchar, char, smallint, integer, bigint "
-                + "and integral numeric."),
+                + $"({value.GetType().Name}). Supported are text, varchar, char(n), smallint, integer, "
+                + "bigint and integral numeric."),
         };
     }
 

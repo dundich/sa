@@ -86,8 +86,8 @@ public interface ITableSettings
     /// The built-in <see cref="ITableBuilder.Build"/> result never returns <c>null</c>: a table with
     /// no declared values simply answers an empty series, and a list-partitioned table with no values
     /// is then skipped by the migration (it has no leaf to create). A hand-written
-    /// <see cref="ITableSettings"/> may still return <c>null</c>, which the migration also treats as
-    /// "no values for this table".
+    /// <see cref="ITableSettings"/> may still answer <c>null</c> despite the annotation; the migration
+    /// and the cleanup both treat that as "no values for this table" instead of failing.
     /// </summary>
     IPartTableMigrationSupport Migration { get; }
 

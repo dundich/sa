@@ -370,11 +370,7 @@ static Sa.RangeExtensions.Normalize<T>(this Sa.Section<T>! range) -> Sa.Section<
 static Sa.RangeExtensions.Normalize<T>(this Sa.LimSection<T>! range) -> Sa.LimSection<T>!
 Sa.Partitional.PostgreSql.Enumeration<T>.CompareTo(T? other) -> int
 static Sa.RangeExtensions.InRange<T>(this Sa.Section<T>! range, T value) -> bool
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator <(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
 static Sa.RangeExtensions.InRange<T>(this Sa.LimSection<T>! range, T value) -> bool
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator <=(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator >(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
-static Sa.Partitional.PostgreSql.Enumeration<T>.operator >=(Sa.Partitional.PostgreSql.Enumeration<T!>! left, Sa.Partitional.PostgreSql.Enumeration<T!>! right) -> bool
 override Sa.Partitional.PostgreSql.Enumeration<T>.ToString() -> string!
 static Sa.RangeExtensions.FindEmptyIntervals<T>(this Sa.Section<T>! range, System.Collections.Generic.IEnumerable<Sa.Section<T>!>! busyIntervals) -> System.Collections.Generic.List<Sa.Section<T>!>!
 static Sa.Partitional.PostgreSql.Setup.AddSaPartitional(this Microsoft.Extensions.DependencyInjection.IServiceCollection! services, System.Action<System.IServiceProvider!, Sa.Partitional.PostgreSql.ISettingsBuilder!>! configure, bool? asBackgroundJob = null) -> Sa.Partitional.PostgreSql.IPartConfiguration!

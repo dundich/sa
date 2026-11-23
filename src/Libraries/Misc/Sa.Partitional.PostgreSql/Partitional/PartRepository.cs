@@ -3,34 +3,54 @@ using Npgsql;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Partitional.PostgreSql.SqlBuilder;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.ExceptionServices;
 using System.Text;
 
 namespace Sa.Partitional.PostgreSql.Repositories;
 
+/// <summary>
+/// Executes the partition DDL of one module and reads back what the database actually has.
+/// </summary>
+/// <remarks>
+/// Deliberately not <see cref="IDisposable"/>: the migration gate below must survive the container's
+/// disposal, see <c>_migrationSemaphore</c>. CA1001 is suppressed for that single field - the
+/// semaphore owns no unmanaged resource, so there is nothing to release.
+/// </remarks>
+[SuppressMessage(
+    "Design",
+    "CA1001:Types that own disposable fields should be disposable",
+    Justification = "The SemaphoreSlim gate must outlive the container: disposing it breaks a run that " +
+                    "is still queued on it (see the field's remarks). It owns no unmanaged resource.")]
 internal sealed partial class PartRepository(
     IPgDataSource dataSource,
     ISqlBuilder sqlBuilder,
     IPartTableAdopter adopter,
     // Required, not optional: the [LoggerMessage] methods dereference it, so a null logger
     // turned the first drop/migrate into a NullReferenceException.
-    ILogger<PartRepository> logger) : IPartRepository, IDisposable
+    ILogger<PartRepository> logger) : IPartRepository
 {
 
     /// <summary>
-    /// Semaphore to ensure we don't perform ddl sql concurrently for this data source.
+    /// Serializes the DDL of this module, so two partitions are never created concurrently by it.
     /// </summary>
     /// <remarks>
-    /// Never disposed. <see cref="SemaphoreSlim"/> owns no unmanaged resource unless
-    /// <c>AvailableWaitHandle</c> is used (it is not), while disposing it does break a run that is
-    /// still queued on it: the host disposes singletons on its way out, and that run would then get
-    /// an <see cref="ObjectDisposedException"/> instead of finishing or waiting for its token.
+    /// <para>
+    /// Deliberately not <see cref="IDisposable"/> and never disposed. <see cref="SemaphoreSlim"/> owns
+    /// no unmanaged resource unless <c>AvailableWaitHandle</c> is used (it is not), while disposing it
+    /// does break a run that is still queued on it: the host disposes singletons on its way out, and
+    /// that run would then get an <see cref="ObjectDisposedException"/> instead of finishing or
+    /// waiting for its token. For the same reason the <c>finally</c> in <see cref="ExecuteDDLAsync"/>
+    /// has no defensive <c>catch</c>: nothing can dispose the semaphore behind it.
+    /// </para>
+    /// <para>
+    /// The gate is per repository, i.e. per module, not per data source: two keyed modules that share
+    /// one <see cref="IPgDataSource"/> are not serialized against each other (their partition names
+    /// never overlap, and the shared schema/cache DDL is idempotent).
+    /// </para>
     /// </remarks>
     private readonly SemaphoreSlim _migrationSemaphore = new(1, 1);
-
-    /// <summary>Releases the migration gate.</summary>
-    public void Dispose() => _migrationSemaphore.Dispose();
 
     /// <summary>
     /// SQLSTATE of "object in use" — what PostgreSQL raises when a
@@ -275,8 +295,12 @@ internal sealed partial class PartRepository(
     /// </summary>
     /// <remarks>
     /// The value path is parsed back from the partition name (<c>{root}{sep}{v1}{sep}{v2}…</c>). A name
-    /// produced by <see cref="ITableBuilder.WithLongPartitionName"/> no longer carries the values, so
-    /// such a partition is left alone — pruning is opt-in and must never guess.
+    /// produced by <see cref="ITableBuilder.WithLongPartitionName"/> no longer carries the values, so it
+    /// cannot be matched by value: a name whose segment count does not match its nesting depth is left
+    /// alone, and the one shape that survives that check (a one-level branch renamed to a single
+    /// segment) is compared against the names the migration declares, with the callback applied. A
+    /// renamed branch the migration declares is therefore never pruned; one it does not declare is
+    /// pruned like any other unknown value whose whole subtree is empty.
     /// </remarks>
     public async Task<int> PruneEmptyListPartsAsync(string tableName, CancellationToken cancellationToken = default)
     {
@@ -288,8 +312,12 @@ internal sealed partial class PartRepository(
         string qualifiedRoot = SqlTemplate.QualifiedName(settings.DatabaseSchemaName, settings.DatabaseTableName);
 
         // Resolved once, and only for this table: a branch the migration creates must never be pruned,
-        // otherwise the cleanup and the next migration tick would fight over it.
-        StrOrNum[][] declaredValues = await settings.Migration.GetPartsAsync(cancellationToken).ConfigureAwait(false);
+        // otherwise the cleanup and the next migration tick would fight over it. A hand-written
+        // ITableSettings may answer null, which reads as "no declared values" (see ITableSettings).
+        StrOrNum[][] declaredValues = settings.Migration is { } migration
+            ? await migration.GetPartsAsync(cancellationToken).ConfigureAwait(false)
+            : [];
+
         List<string[]> declared = [.. declaredValues.Select(branch => branch.Select(value => value.ToString()).ToArray())];
 
         List<ListPartition> parts = await PgRetryStrategy.ExecuteWithRetry(
@@ -315,6 +343,17 @@ internal sealed partial class PartRepository(
             if (path.Length != part.Depth) continue;
 
             if (IsDeclared(path, declared)) continue;
+
+            // The depth check does not catch a WithLongPartitionName replacement of a *one-level*
+            // list: that renamed parent also has a single name segment, so it looks exactly like a
+            // regular parent for an unknown value. Compare the name against the ones the migration
+            // declares (overflow callback applied), so a renamed declared branch is not dropped just
+            // for the next tick to recreate it.
+            if (settings.LongPartitionName is not null
+                && IsRenamedDeclared(settings, part.BareName, declaredValues))
+            {
+                continue;
+            }
 
             string qualified = SqlTemplate.QualifiedName(part.SchemaName, part.BareName);
 
@@ -361,6 +400,31 @@ internal sealed partial class PartRepository(
             }
 
             if (match) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reports whether <paramref name="bareName"/> is the name the migration declares for one of its
+    /// branches — or for a list-level prefix of one — after the overflow callback was applied.
+    /// </summary>
+    /// <remarks>
+    /// Only a table with <see cref="ITableBuilder.WithLongPartitionName"/> needs this: with the
+    /// callback, a partition name no longer carries its values, so <see cref="IsDeclared"/> cannot
+    /// recognize it. A one-level list is the case the depth check misses; deeper renamed parents are
+    /// already skipped by it.
+    /// </remarks>
+    private static bool IsRenamedDeclared(ITableSettings settings, string bareName, StrOrNum[][] declaredValues)
+    {
+        foreach (StrOrNum[] branch in declaredValues)
+        {
+            for (int depth = 1; depth <= branch.Length; depth++)
+            {
+                string declaredName = settings.GetResolvedPartTableName(branch.AsSpan(0, depth));
+
+                if (string.Equals(declaredName, bareName, StringComparison.Ordinal)) return true;
+            }
         }
 
         return false;
@@ -777,7 +841,7 @@ internal sealed partial class PartRepository(
     [LoggerMessage(
         EventId = 410,
         Level = LogLevel.Warning,
-        Message = "Archive target {ArchiveTable} already exists for part with ID {PartId}. The part is left attached; rename or drop the archived copy to let the new one in.")]
+        Message = "Archive target {ArchiveTable} already exists for part with ID {PartId}. The part is left in place (attached, or already detached by an interrupted run); rename or drop the archived copy to let the new one in.")]
     partial void LogArchiveTargetExists(string archiveTable, string partId);
 
     [LoggerMessage(

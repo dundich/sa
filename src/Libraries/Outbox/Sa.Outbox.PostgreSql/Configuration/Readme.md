@@ -404,7 +404,7 @@ Controls the partition-creation job (daily partitions are created for the time-s
 
 | Property | Type | Default | Description |
 |---|---|---|---|
-| `AsBackgroundJob` | `bool` | `true` | `true` — the migration job is scheduled: it starts immediately on host startup and then repeats every `ExecutionInterval`. `false` — the job is registered but `Disabled()`; the `IMigrationService` is still resolvable so you can run a migration manually (e.g. `WaitMigration(...)`) |
+| `AsBackgroundJob` | `bool` | `true` | `true` — the migration job is scheduled: it starts immediately on host startup and then repeats every `ExecutionInterval`. `false` — the job is registered but `Disabled()`; the `IMigrationService` is still resolvable so you can run a migration manually (e.g. `WaitMigrationAsync(...)`) |
 | `ForwardDays` | `int` | `2` | How far ahead the migration moves: each run ensures partitions exist for today .. today + `ForwardDays − 1` (i.e. `ForwardDays = 2` → today and tomorrow). This is what keeps the partitioning "ahead of the clock" without manual DDL |
 | `ExecutionInterval` | `TimeSpan` | `6 h` + random 1–58 min | Repeat interval of the migration job. The default is not a fixed 6 hours: `6 h + Random.Shared.Next(1, 59) minutes` (roll happens when the settings object is constructed). The jitter de-synchronizes several replicas/instances so they don't all try to migrate in the same instant |
 
@@ -795,7 +795,7 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
         settings.MigrationSettings.AsBackgroundJob = false;  // job is Disabled()
         // IMigrationService stays resolvable — run migrations manually:
         // var migration = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-        // await migration.WaitMigration(TimeSpan.FromSeconds(30), ct);
+        // await migration.WaitMigrationAsync(TimeSpan.FromSeconds(30), ct);
     })
 );
 ```

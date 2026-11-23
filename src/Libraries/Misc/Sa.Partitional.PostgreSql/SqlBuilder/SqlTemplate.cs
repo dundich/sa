@@ -84,10 +84,12 @@ internal static class SqlTemplate
     /// <c>"</c> terminate the identifier and append SQL.
     /// </remarks>
     internal static string QuoteIdentifier(string? name)
-        => $"\"{(name ?? string.Empty).Replace("\"", "\"\"", StringComparison.Ordinal)}\"";    /// <summary>
-                                                                                               /// Renders a partition key value as a SQL literal: strings are quoted and escaped, numbers
-                                                                                               /// are emitted with the invariant culture.
-                                                                                               /// </summary>
+        => $"\"{(name ?? string.Empty).Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    /// <summary>
+    /// Renders a partition key value as a SQL literal: strings are quoted and escaped, numbers are
+    /// emitted with the invariant culture.
+    /// </summary>
     private static string QuoteValue(StrOrNum value)
         => value.Match(s => QuoteLiteral(s), n => n.ToString(CultureInfo.InvariantCulture));
 
@@ -414,9 +416,8 @@ SELECT * FROM {QuoteIdentifier(tempTableName)};
         => SqlFieldName.HasColumn(settings.Fields, columnName);
 
     /// <summary>
-    /// DDL для создания вложенной партиции (nested list partition).
-    /// Первая строка — аннотирующий комментарий «NESTED PARTITION»;
-    /// ниже — стандартный CREATE TABLE ... PARTITION OF ... FOR VALUES IN (...).
+    /// DDL of a nested list partition: the "NESTED PARTITION" annotation comment followed by the
+    /// standard <c>CREATE TABLE ... PARTITION OF ... FOR VALUES IN (...)</c>.
     /// </summary>
     public static string CreateNestedSql(this ITableSettings settings, StrOrNum[] values)
         => CreateNestedSql(settings, values.AsSpan());
@@ -442,7 +443,7 @@ FOR VALUES IN ({QuoteValue(values[^1])})
 """;
 
 
-    // Вспомогательный метод
+    // Helper
     private static string GetFillFactorClause(this ITableSettings settings)
     {
         // null means "not configured": the clause is omitted and PostgreSQL applies its own default
@@ -843,6 +844,32 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
         string tableName,
         ReadOnlySpan<StrOrNum> values = default,
         string? suffix = null)
+        => QualifiedName(
+            settings.DatabaseSchemaName,
+            settings.ResolvePartTableNameCore(tableName, values, suffix));
+
+    /// <summary>
+    /// Bare partition name (unqualified, unquoted) after the overflow callback — the name the library
+    /// would actually create for these values.
+    /// </summary>
+    /// <remarks>
+    /// The cleanup needs this to recognise a branch declared by the migration whose name no longer
+    /// carries its values (see <c>PruneEmptyListPartsAsync</c>).
+    /// </remarks>
+    internal static string GetResolvedPartTableName(
+        this ITableSettings settings, ReadOnlySpan<StrOrNum> values, string? suffix = null)
+        => settings.ResolvePartTableNameCore(settings.GetPartTableName(values, suffix), values, suffix);
+
+    /// <summary>
+    /// Applies the 63-byte rule to a generated bare name: returns it unchanged when it fits, asks
+    /// <see cref="ITableSettings.LongPartitionName"/> for a replacement when it does not, and throws
+    /// with the byte breakdown when neither works.
+    /// </summary>
+    static string ResolvePartTableNameCore(
+        this ITableSettings settings,
+        string tableName,
+        ReadOnlySpan<StrOrNum> values = default,
+        string? suffix = null)
     {
         // 63 BYTES, not 63 chars: PostgreSQL truncates on the UTF-8 encoding, and a non-ASCII
         // partition value has more UTF-8 bytes than string.Length. A name PostgreSQL would truncate
@@ -910,7 +937,7 @@ UPDATE {settings.GetCacheByRangeTableName()} SET archived = TRUE WHERE id={Quote
                 + "the partition name.");
         }
 
-        return $"{QuoteIdentifier(settings.DatabaseSchemaName)}.{QuoteIdentifier(tableName)}";
+        return tableName;
     }
 
     static string GetPartitionalSql(this ITableSettings settings, int partIndex)

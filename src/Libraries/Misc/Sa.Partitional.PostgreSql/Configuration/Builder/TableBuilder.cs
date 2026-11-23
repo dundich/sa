@@ -8,7 +8,7 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 {
     static class Default
     {
-        public readonly static PgPartBy DefaultPartBy = PgPartBy.Day;
+        public static readonly PgPartBy DefaultPartBy = PgPartBy.Day;
         public const string PartByRangeFieldName = "created_at";
         public const string SqlPartSeparator = "__";
         public const string PartTablePostfix = "part$";
@@ -51,6 +51,11 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
         if (sqlFields.Length == 0) throw new ArgumentException("fields is empty", nameof(sqlFields));
 
+        foreach (string sqlField in sqlFields)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sqlField);
+        }
+
         if (_rootMode == TableRootMode.Adopt)
         {
             throw new InvalidOperationException(
@@ -83,6 +88,11 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
                 nameof(sqlFields));
         }
 
+        foreach (string sqlField in sqlFields)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(sqlField);
+        }
+
         if (_rootMode == TableRootMode.Adopt)
         {
             if (!_fields.SequenceEqual(sqlFields, StringComparer.Ordinal))
@@ -112,12 +122,21 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
     {
         ArgumentNullException.ThrowIfNull(fieldNames);
 
+        foreach (string fieldName in fieldNames)
+        {
+            // An empty name would pass Build() (nothing declares it) and turn into
+            // `PARTITION BY LIST ("")` at migration time.
+            ArgumentException.ThrowIfNullOrWhiteSpace(fieldName);
+        }
+
         _parts.AddRange(fieldNames);
         return this;
     }
 
     public ITableBuilder TimestampAs(string timestampFieldName)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(timestampFieldName);
+
         _timestamp = timestampFieldName;
         return this;
     }
@@ -136,6 +155,13 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
     public ITableBuilder PartByRange(PgPartBy partBy, string? timestampFieldName = null)
     {
+        ArgumentNullException.ThrowIfNull(partBy);
+
+        if (timestampFieldName is not null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(timestampFieldName);
+        }
+
         _partBy = partBy;
 
         // TimestampAs is the more specific declaration, so it wins: the argument here is only a
@@ -236,6 +262,8 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
 
         ValidatePartitionColumns(partByListFieldNames);
 
+        ValidateColumns(idFieldName, timestampField, partByListFieldNames);
+
         ValidateMigrationBranches(partByListFieldNames);
 
         RangeKeyType rangeKeyType = ResolveRangeKeyType(timestampField);
@@ -256,20 +284,6 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
                 $"Table '{schemaName}.{tableName}' is adopted, but its range partition column "
                 + $"'{timestampField}' is not declared among its fields. An existing table cannot be "
                 + "extended by the library, so declare the column in the AdoptTable call.");
-        }
-
-        if (_rootMode == TableRootMode.Adopt)
-        {
-            string? inlinePk = _fields.FirstOrDefault(field =>
-                field.Contains("PRIMARY KEY", StringComparison.OrdinalIgnoreCase));
-
-            if (inlinePk is not null)
-            {
-                throw new InvalidOperationException(
-                    $"Table '{schemaName}.{tableName}' declares an inline PRIMARY KEY ('{inlinePk}'). "
-                    + "AdoptTable generates its own primary-key constraint, which has to include the "
-                    + "partition key; remove the clause from the field declaration.");
-            }
         }
 
         // A root name PostgreSQL would truncate silently makes every generated identifier (cache
@@ -511,6 +525,62 @@ internal sealed class TableBuilder(string schemaName, string tableName) : ITable
                 + "PartByList column: AddMigration([\"v1\", \"v2\"]) for one branch, "
                 + "AddMigration([\"v1\", \"v2\"], [\"v1\", \"v3\"]) for several, or "
                 + "AddMigration(\"v1\", \"v2\", \"v3\") for a two-level parent with children.");
+        }
+    }
+
+    /// <summary>
+    /// Validates the column declarations the generated DDL depends on.
+    /// </summary>
+    /// <remarks>
+    /// All of these are rejected by PostgreSQL at migration time (from a background job, with an error
+    /// that does not name the table definition): a duplicated column, an inline
+    /// <c>PRIMARY KEY</c> next to the generated one, or one column playing two roles at once.
+    /// </remarks>
+    private void ValidateColumns(string idFieldName, string rangeFieldName, string[] partByListFieldNames)
+    {
+        Dictionary<string, string> declared = new(StringComparer.Ordinal);
+
+        foreach (string field in _fields)
+        {
+            string name = SqlFieldName.Extract(field).ToString();
+
+            if (name.Length == 0) continue;
+
+            if (!declared.TryAdd(name, field))
+            {
+                throw new InvalidOperationException(
+                    $"Table '{schemaName}.{tableName}' declares the column '{name}' more than once "
+                    + $"('{declared[name]}' and '{field}'). Every column has to be declared exactly once.");
+            }
+        }
+
+        string? inlinePk = _fields.FirstOrDefault(field =>
+            field.Contains("PRIMARY KEY", StringComparison.OrdinalIgnoreCase));
+
+        if (inlinePk is not null)
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' declares an inline PRIMARY KEY ('{inlinePk}'). "
+                + "The library generates its own primary-key constraint, which has to include the "
+                + "partition key; remove the clause from the field declaration.");
+        }
+
+        foreach (string listField in partByListFieldNames)
+        {
+            if (!string.Equals(listField, rangeFieldName, StringComparison.Ordinal)) continue;
+
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' uses '{listField}' as both a list partition column "
+                + "and the range partition column. The levels have to partition on different columns, "
+                + "and the generated primary key would name the column twice.");
+        }
+
+        if (string.Equals(idFieldName, rangeFieldName, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Table '{schemaName}.{tableName}' uses its first column '{idFieldName}' as both the id "
+                + "column and the range partition column. The generated primary key names both, so they "
+                + "have to differ: declare a separate id column first.");
         }
     }
 

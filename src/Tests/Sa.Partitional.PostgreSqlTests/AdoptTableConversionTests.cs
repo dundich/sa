@@ -101,6 +101,28 @@ public class AdoptTableConversionTests(AdoptTableConversionTests.Fixture fixture
                             "payload text",
                             "created_at date NOT NULL")
                         .PartByRange(PgPartBy.Day, "created_at");
+
+                    // Rows ~56 years apart: the range alone would need ~20 000 daily partitions.
+                    schema.AdoptTable("adopt_far",
+                            "id bigint NOT NULL",
+                            "created_at bigint NOT NULL")
+                        .PartByRange(PgPartBy.Day, "created_at");
+
+                    // An integral numeric list key exercises the decimal -> long conversion.
+                    schema.AdoptTable("adopt_numeric",
+                            "id bigint NOT NULL",
+                            "tenant numeric(18,0) NOT NULL",
+                            "created_at bigint NOT NULL")
+                        .PartByList("tenant")
+                        .PartByRange(PgPartBy.Day, "created_at");
+
+                    // A list key type the conversion cannot render as a partition value.
+                    schema.AdoptTable("adopt_uuid",
+                            "id bigint NOT NULL",
+                            "tenant uuid NOT NULL",
+                            "created_at bigint NOT NULL")
+                        .PartByList("tenant")
+                        .PartByRange(PgPartBy.Day, "created_at");
                 });
             })
             .AddDataSource(configure => configure.Options(ob => ob.Configure(o => o.ConnectionString = this.ConnectionString)))
@@ -442,5 +464,79 @@ CREATE TABLE public.adopt_fk_child (
         Assert.Contains("foreign keys", ex.Message, StringComparison.Ordinal);
         Assert.Equal("r", await RelKind("adopt_fk"));
         Assert.False(await Exists("public.adopt_fk__backup$"));
+    }
+
+    [Fact]
+    public async Task RangeTooWide_IsRejectedBeforeAnyPartitionOrBackupIsCreated()
+    {
+        await fixture.DataSource.ExecuteNonQueryAsync("""
+CREATE TABLE public.adopt_far (
+  id bigint NOT NULL,
+  created_at bigint NOT NULL
+);
+
+INSERT INTO public.adopt_far (id, created_at)
+VALUES (1, 1), (2, @now);
+""", [new NpgsqlParameter<long>("now", Today.ToUnixTimeSeconds())], Ct);
+
+        // 1 (1970) .. today is ~20 000 daily periods; the conversion stops before asking PostgreSQL
+        // for them (an accidental denial of service otherwise).
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Parts.CreatePartAsync("adopt_far", Today, [], Ct));
+
+        Assert.Contains("more than 1000", ex.Message, StringComparison.Ordinal);
+
+        // The whole conversion is one transaction: the rename was rolled back with it.
+        Assert.Equal("r", await RelKind("adopt_far"));
+        Assert.False(await Exists("public.adopt_far__backup$"));
+    }
+
+    [Fact]
+    public async Task NumericListKey_IsReadFromTheDataAndBecomesAPartitionValue()
+    {
+        await fixture.DataSource.ExecuteNonQueryAsync("""
+CREATE TABLE public.adopt_numeric (
+  id bigint NOT NULL,
+  tenant numeric(18,0) NOT NULL,
+  created_at bigint NOT NULL
+);
+
+INSERT INTO public.adopt_numeric (id, tenant, created_at)
+VALUES (1, 7, @date), (2, 8, @date);
+""", [new NpgsqlParameter<long>("date", Today.ToUnixTimeSeconds())], Ct);
+
+        await Manager.EnsurePartsAsync("adopt_numeric", Today, [7], Ct);
+
+        Assert.Equal("p", await RelKind("adopt_numeric"));
+        Assert.Equal(2, await Count("public.adopt_numeric"));
+
+        string suffix = PgPartBy.Day.Fmt(Today);
+
+        // The decimal (7.000… as Npgsql reports numeric) has to become the numeric partition key 7,
+        // not the string "7.0000".
+        Assert.True(await Exists($"public.\"adopt_numeric__7__{suffix}\""));
+        Assert.True(await Exists($"public.\"adopt_numeric__8__{suffix}\""));
+    }
+
+    [Fact]
+    public async Task UnsupportedListKeyType_IsRejected()
+    {
+        await fixture.DataSource.ExecuteNonQueryAsync("""
+CREATE TABLE public.adopt_uuid (
+  id bigint NOT NULL,
+  tenant uuid NOT NULL,
+  created_at bigint NOT NULL
+);
+
+INSERT INTO public.adopt_uuid (id, tenant, created_at)
+VALUES (1, '00000000-0000-0000-0000-000000000001', @date);
+""", [new NpgsqlParameter<long>("date", Today.ToUnixTimeSeconds())], Ct);
+
+        InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => Parts.CreatePartAsync("adopt_uuid", Today, ["any"], Ct));
+
+        Assert.Contains("unsupported type", ex.Message, StringComparison.Ordinal);
+        Assert.Equal("r", await RelKind("adopt_uuid"));
+        Assert.False(await Exists("public.adopt_uuid__backup$"));
     }
 }

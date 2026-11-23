@@ -403,7 +403,7 @@ settings.TableSettings.Message.Fields =
 
 | Свойство | Тип | По умолчанию | Описание |
 |---|---|---|---|
-| `AsBackgroundJob` | `bool` | `true` | `true` — job миграции расписан: стартует сразу при запуске host'а, затем повторяется каждые `ExecutionInterval`. `false` — job зарегистрирован, но `Disabled()`; `IMigrationService` по-прежнему резолвится, так что миграцию можно запустить вручную (например, `WaitMigration(...)`) |
+| `AsBackgroundJob` | `bool` | `true` | `true` — job миграции расписан: стартует сразу при запуске host'а, затем повторяется каждые `ExecutionInterval`. `false` — job зарегистрирован, но `Disabled()`; `IMigrationService` по-прежнему резолвится, так что миграцию можно запустить вручную (например, `WaitMigrationAsync(...)`) |
 | `ForwardDays` | `int` | `2` | Насколько вперёд двигается миграция: за один прогон гарантируется существование партиций на сегодня .. сегодня + `ForwardDays − 1` (т.е. `ForwardDays = 2` → сегодня и завтра). Это и «подтягивает» партиционирование вперёд по времени без ручного DDL |
 | `ExecutionInterval` | `TimeSpan` | `6 ч` + случайные 1–58 мин | Интервал повтора job-а миграции. Значение по умолчанию — не фиксированные 6 часов: `6 ч + Random.Shared.Next(1, 59) минут` (рандом генерируется при создании объекта настроек). Jitter рассинхронизирует несколько реплик/инстансов, чтобы они не пытались мигрировать в один и тот же момент |
 
@@ -794,7 +794,7 @@ services.AddSaOutboxUsingPostgreSql(cfg => cfg
         settings.MigrationSettings.AsBackgroundJob = false;  // job будет Disabled()
         // IMigrationService по-прежнему резолвится — миграцию можно запускать вручную:
         // var migration = host.Services.GetRequiredKeyedService<IMigrationService>(OutboxScope.DefaultKey);
-        // await migration.WaitMigration(TimeSpan.FromSeconds(30), ct);
+        // await migration.WaitMigrationAsync(TimeSpan.FromSeconds(30), ct);
     })
 );
 ```

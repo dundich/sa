@@ -45,20 +45,20 @@ public class KeyedPartitionAsJobTests(KeyedPartitionAsJobTests.Fixture fixture)
     [Fact]
     public async Task KeyedModule_UsesDefaultDataSource_AndItsMigrationJobRuns()
     {
+        CancellationToken ct = TestContext.Current.CancellationToken;
+
         IScheduler scheduler = fixture.ServiceProvider.GetRequiredKeyedService<IScheduler>(ModuleKey);
 
-        int started = await scheduler.StartAsync(TestContext.Current.CancellationToken);
+        int started = await scheduler.StartAsync(ct);
         Assert.True(started > 0);
-
-        await Task.Delay(800, TestContext.Current.CancellationToken);
 
         IPartRepository repository = fixture.ServiceProvider.GetRequiredKeyedService<IPartRepository>(ModuleKey);
 
-        var parts = await repository.GetPartsFromDate(
-            "keyed_customer",
-            StartOfDay(DateTimeOffset.Now),
-            TestContext.Current.CancellationToken);
-
-        Assert.NotEmpty(parts);
+        // Wait for the job's effect instead of sleeping for a hard-coded 800 ms: the keyed module's
+        // scheduler runs on its own thread and must be observed, not assumed.
+        await AwaitHelper.UntilTrueAsync(
+            async () => (await repository.GetPartsFromDate("keyed_customer", StartOfDay(DateTimeOffset.Now), ct)).Count > 0,
+            TimeSpan.FromSeconds(30),
+            ct);
     }
 }

@@ -627,4 +627,105 @@ public class SqlBuilderTests(SqlBuilderTests.Fixture fixture) : IClassFixture<Sq
         Assert.Contains("\"created_at\" >= '2026-10-29 00:00:00+00'", predicate, StringComparison.Ordinal);
         Assert.Contains("\"created_at\" < '2026-10-30 00:00:00+00'", predicate, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Build_RejectsADuplicateColumnDeclaration()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "payload TEXT", "id BIGINT NOT NULL");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("'id' more than once", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_RejectsAListColumnThatIsAlsoTheRangeColumn()
+    {
+        // PostgreSQL would refuse the generated `PRIMARY KEY (..., "tenant", "tenant")`, from a
+        // background job that cannot name the declaration that caused it.
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id INT NOT NULL", "tenant TEXT NOT NULL")
+            .PartByList("tenant")
+            .TimestampAs("tenant");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("both a list partition column", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_RejectsAnIdColumnThatIsAlsoTheRangeColumn()
+    {
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "created_at BIGINT NOT NULL", "payload TEXT");
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("both the id column", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_RejectsAnInlinePrimaryKeyInCreateMode()
+    {
+        // Create mode generates its own PRIMARY KEY just like Adopt mode, so an inline one would be
+        // the second one on the table ("multiple primary keys ... are not allowed").
+        SchemaBuilder builder = new("public");
+        builder.AddTable("t", "id BIGINT PRIMARY KEY", "created_at BIGINT NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => builder.Build());
+
+        Assert.Contains("inline PRIMARY KEY", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PartByList_RejectsBlankColumnNames()
+    {
+        SchemaBuilder builder = new("public");
+        ITableBuilder table = builder.AddTable("t", "id INT NOT NULL", "tenant TEXT NOT NULL");
+
+        Assert.ThrowsAny<ArgumentException>(() => table.PartByList("  "));
+        Assert.ThrowsAny<ArgumentException>(() => table.PartByList(null!));
+    }
+
+    [Fact]
+    public void TimestampAs_RejectsABlankName()
+    {
+        SchemaBuilder builder = new("public");
+        ITableBuilder table = builder.AddTable("t", "id INT NOT NULL");
+
+        Assert.ThrowsAny<ArgumentException>(() => table.TimestampAs(" "));
+    }
+
+    [Fact]
+    public void WithFillFactor_IsAppliedToTheRangeLeafOnly()
+    {
+        // Applied to the date-range children only: the root, the cache table and the intermediate
+        // list levels are emitted without it (a fillfactor on a partition parent has no effect).
+        SchemaBuilder builder = new("public");
+        builder.AddTable("ff", "id INT NOT NULL", "part TEXT NOT NULL", "created_at BIGINT NOT NULL")
+            .PartByList("part")
+            .PartByRange(PgPartBy.Day, "created_at")
+            .WithFillFactor(70);
+
+        string sql = new SqlTableBuilder(builder.Build().Single()).CreateSql(Date, "v");
+
+        Assert.Contains("WITH (fillfactor = 70)", sql, StringComparison.Ordinal);
+        Assert.Equal(1, sql.Split("fillfactor", StringSplitOptions.None).Length - 1);
+    }
+
+    [Theory]
+    [InlineData(9)]
+    [InlineData(0)]
+    [InlineData(101)]
+    public void WithFillFactor_RejectsValuesOutsideThePostgresRange(int fillFactor)
+    {
+        // PostgreSQL's own range is 10–100; clamping silently would create the table with a value
+        // nobody asked for.
+        SchemaBuilder builder = new("public");
+        ITableBuilder table = builder.AddTable("ff", "id INT NOT NULL", "created_at BIGINT NOT NULL");
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => table.WithFillFactor(fillFactor));
+    }
 }

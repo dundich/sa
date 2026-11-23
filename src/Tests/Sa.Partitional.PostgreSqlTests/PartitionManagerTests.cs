@@ -49,7 +49,6 @@ public class PartitionManagerTests(PartitionManagerTests.Fixture fixture)
     [Fact]
     public async Task MigrateTest()
     {
-        Console.WriteLine(fixture.ConnectionString);
         // Act
         int i = await Sub.MigrateAsync(TestContext.Current.CancellationToken);
         Assert.True(i > 0);

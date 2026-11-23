@@ -72,4 +72,42 @@ public class MigrateBatchSqlTests
         Assert.Contains(batches, sql => sql.Contains("\"t_list__acme__", StringComparison.Ordinal));
         Assert.Contains(batches, sql => sql.Contains("\"t_list__globex__", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public async Task OneBrokenTable_IsReportedAsItsOwnBatch_AndTheOthersStillGetTheirs()
+    {
+        // A failure while resolving a table's values (including the adoption step) is reported as a
+        // batch of its own, so the repository can log it and still migrate every other table instead
+        // of unwinding the whole run before they start.
+        SchemaBuilder schema = new("public");
+
+        schema.AddTable("bad_list", "id bigint NOT NULL", "tenant text NOT NULL", "created_at bigint NOT NULL")
+            .PartByList("tenant")
+            .PartByRange(PgPartBy.Day);
+
+        schema.AddTable("good_range", "id bigint NOT NULL", "created_at bigint NOT NULL")
+            .PartByRange(PgPartBy.Day);
+
+        SqlBuilder builder = new(new TableSettingsStorage(schema.Build()));
+
+        List<MigrateBatch> batches = [];
+
+        await foreach (MigrateBatch batch in builder.MigrateSql([Day], table =>
+        {
+            if (table == "public.bad_list") throw new InvalidOperationException("resolution failed");
+
+            return Task.FromResult<StrOrNum[][]>([]);
+        }))
+        {
+            batches.Add(batch);
+        }
+
+        MigrateBatch failed = Assert.Single(batches, batch => batch.TableName == "public.bad_list");
+
+        Assert.Null(failed.Sql);
+        Assert.Equal("resolution failed", failed.Error?.Message);
+
+        Assert.Contains(batches, batch =>
+            batch.TableName == "public.good_range" && batch.Sql is not null && batch.Error is null);
+    }
 }

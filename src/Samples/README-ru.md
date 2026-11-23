@@ -132,7 +132,7 @@ completed:Hello, HybridFileStorage!
 
 1. Настраивает таблицу `customer`, партиционированную по списку (`country`, `city`).
 2. Определяет расписание миграций для RU (Moscow, Samara), USA (Alabama, New York), FR (Paris, Lyon, Bordeaux).
-3. Выполняет `partition.Migrate()` для создания физических партиций.
+3. Выполняет `partition.MigrateAsync()` для создания физических партиций.
 4. Выводит список созданных партиций на следующие 3 дня.
 
 ### Запуск

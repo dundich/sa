@@ -14,8 +14,8 @@
 │         │                 │                │        │
 │  ┌──────▼────────────────▼────────────────▼──────┐ │
 │  │           IPartitionManager                   │ │
-│  │   • Migrate()                                 │ │
-│  │   • EnsureParts()                             │ │
+│  │   • MigrateAsync()                            │ │
+│  │   • EnsurePartsAsync()                         │ │
 │  └───────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────┘
          │              │               │
@@ -106,7 +106,7 @@ public interface ISchemaBuilder
 ```
 
 `ITableSettings.RootMode` reports the mode (`Create` or `Adopt`). The conversion is performed by
-`PartTableAdopter` the first time the table is touched by `Migrate` or `EnsureParts`:
+`PartTableAdopter` the first time the table is touched by `MigrateAsync` or `EnsurePartsAsync`:
 
 | Observed state | Action |
 |---|---|
@@ -163,10 +163,10 @@ Entry point for programmatic partition management. Registered as singleton via D
 public interface IPartitionManager
 {
     /// <summary>Create any missing partitions across all configured tables.</summary>
-    Task<int> Migrate(CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Create partitions only for the specified dates.</summary>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Ensure a specific partition exists; create it if absent.
@@ -174,13 +174,16 @@ public interface IPartitionManager
     /// Completes when the partition exists; failures surface as exceptions, so there is no result
     /// to inspect (a cache miss is not a failure).
     /// </summary>
-    Task EnsureParts(
+    Task EnsurePartsAsync(
         string tableName,
-        DateTimeOffset date,
+        DateTimeOffset periodStart,
         StrOrNum[] partValues,
         CancellationToken cancellationToken = default);
 }
 ```
+
+`-1` from either `MigrateAsync` overload means "not completed" (deadline elapsed or cancelled), never
+a negative partition count — the generated DDL is idempotent, so the next run finishes the remainder.
 
 **Usage:**
 
@@ -194,28 +197,28 @@ public class MyService
     public async Task OnDataReceived(string tenant, DateTimeOffset now)
     {
         // Ensures partition for this tenant/date exists before writing data
-        await _parts.EnsureParts("events", now, new StrOrNum[] { tenant });
+        await _parts.EnsurePartsAsync("events", now, new StrOrNum[] { tenant });
     }
 }
 ```
 
 ### `IPartRepository`
 
-Low-level DDL executor — creates, queries, and drops partitions directly against PostgreSQL.
+Low-level DDL executor — creates, queries, drops and archives partitions directly against PostgreSQL.
 
 ```csharp
 public interface IPartRepository
 {
     /// <summary>Creates a single partition (child table) for the given table, date, and values.</summary>
-    Task<int> CreatePart(
-        string tableName, DateTimeOffset date, StrOrNum[] partValues,
+    Task<int> CreatePartAsync(
+        string tableName, DateTimeOffset periodStart, StrOrNum[] partValues,
         CancellationToken cancellationToken = default);
 
     /// <summary>Ensures all tables have partitions covering each date in <paramref name="dates"/>.</summary>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
-    /// <summary>Same as above, but resolves list-partition values dynamically via <paramref name="resolve"/>.</summary>
-    Task<int> Migrate(
+    /// <summary>Same as above, but resolves list-partition values via <paramref name="resolve"/>.</summary>
+    Task<int> MigrateAsync(
         DateTimeOffset[] dates,
         Func<string, Task<StrOrNum[][]>> resolve,
         CancellationToken cancellationToken = default);
@@ -231,7 +234,7 @@ public interface IPartRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>Drops all partitions whose FromDate ≤ <paramref name="toDate"/>.</summary>
-    Task<int> DropPartsToDate(
+    Task<int> DropPartsToDateAsync(
         string tableName, DateTimeOffset toDate,
         CancellationToken cancellationToken = default);
 
@@ -239,18 +242,18 @@ public interface IPartRepository
     /// Detaches every partition whose FromDate ≤ <paramref name="toDate"/> and moves it, under the
     /// same name, into <paramref name="archiveSchemaName"/> (created when missing). Its cache row is
     /// marked archived instead of being deleted, so a repeated run is a no-op. PostgreSQL 13+.
-    /// A name the archive already holds is left attached and logged.
+    /// A name the archive already holds is left in place and logged.
     /// </summary>
-    Task<int> ArchivePartsToDate(
+    Task<int> ArchivePartsToDateAsync(
         string tableName, DateTimeOffset toDate, string archiveSchemaName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Same as above, but chooses the name-collision policy: <see cref="ArchiveCollisionMode.Fail"/>
-    /// (leave attached, log) or <see cref="ArchiveCollisionMode.RenameExisting"/> (move the older
+    /// (leave in place, log) or <see cref="ArchiveCollisionMode.RenameExisting"/> (move the older
     /// archived copy and its indexes to {name}{sep}prev$N, then archive the new one).
     /// </summary>
-    Task<int> ArchivePartsToDate(
+    Task<int> ArchivePartsToDateAsync(
         string tableName, DateTimeOffset toDate, string archiveSchemaName,
         ArchiveCollisionMode collisionMode,
         CancellationToken cancellationToken = default);
@@ -258,8 +261,9 @@ public interface IPartRepository
     /// <summary>
     /// Drops list-level partitions whose whole subtree is empty and whose value the table's migration
     /// support does not declare. Opt-in via PartCleanupScheduleSettings.PruneEmptyListParts.
+    /// A branch renamed by WithLongPartitionName is recognised and left alone.
     /// </summary>
-    Task<int> PruneEmptyListParts(
+    Task<int> PruneEmptyListPartsAsync(
         string tableName, CancellationToken cancellationToken = default);
 }
 ```
@@ -271,14 +275,14 @@ Automated pre-creation of future partitions. Runs on schedule or manually.
 ```csharp
 public interface IMigrationService
 {
-    /// <summary>Triggered after a successful migration cycle completes.</summary>
+    /// <summary>Triggered after a successful migration cycle completes (one-shot).</summary>
     CancellationToken OnMigrated { get; }
 
     /// <summary>Migrates all tables for the configured forward-days window.</summary>
-    Task<int> Migrate(CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Migrates only for the specified dates.</summary>
-    Task<int> Migrate(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
+    Task<int> MigrateAsync(DateTimeOffset[] dates, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Waits asynchronously (up to <paramref name="timeout"/>) for an in-flight migration to
@@ -286,9 +290,13 @@ public interface IMigrationService
     /// is one-shot, so it answers "has a migration ever completed". A timeout or a cancelled
     /// <paramref name="cancellationToken"/> returns <c>false</c> rather than throwing.
     /// </summary>
-    Task<bool> WaitMigration(TimeSpan timeout, CancellationToken cancellationToken = default);
+    Task<bool> WaitMigrationAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
 }
 ```
+
+`OnMigrated` stays usable after the service is disposed (the underlying source is deliberately not
+disposed), so a waiter that is still around during shutdown gets `false` instead of
+`ObjectDisposedException`.
 
 ### `IPartCleanupService`
 
@@ -298,18 +306,19 @@ Automatic removal of old partitions past the retention window.
 public interface IPartCleanupService
 {
     /// <summary>Drops partitions older than the configured retention period.</summary>
-    Task<int> Clean(CancellationToken cancellationToken);
+    Task<int> CleanAsync(CancellationToken cancellationToken);
 
     /// <summary>Drops all partitions with FromDate ≤ <paramref name="toDate"/>.</summary>
-    Task<int> Clean(DateTimeOffset toDate, CancellationToken cancellationToken);
+    Task<int> CleanAsync(DateTimeOffset toDate, CancellationToken cancellationToken);
 }
-
-`Clean` follows `PartCleanupScheduleSettings.CleanupMode`: `Drop` deletes the partitions, `Archive`
-detaches them and moves them into `PartCleanupScheduleSettings.ArchiveSchemaName` (see
-`IPartRepository.ArchivePartsToDate`). Either way the in-memory partition cache is **not** invalidated
-by a manual call, so the change becomes visible only after `PartCacheSettings.CacheTtl` - prefer the
-scheduled job when the same process must see it immediately.
 ```
+
+`CleanAsync` follows `PartCleanupScheduleSettings.CleanupMode`: `Drop` deletes the partitions,
+`Archive` detaches them and moves them into `PartCleanupScheduleSettings.ArchiveSchemaName` (see
+`IPartRepository.ArchivePartsToDateAsync`). Either way the in-memory partition cache is **not**
+invalidated by a manual call, so the change becomes visible only after
+`PartCacheSettings.CacheTtl` - prefer the scheduled job when the same process must see it
+immediately.
 
 ## Internal Components
 

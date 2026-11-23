@@ -11,7 +11,7 @@ namespace Sa.Partitional.PostgreSql.Cleaning;
 
 internal static class Setup
 {
-    readonly static Guid JobId = Guid.Parse("7da81411-9db7-4553-8e93-bd1f12d02b38");
+    static readonly Guid JobId = Guid.Parse("7da81411-9db7-4553-8e93-bd1f12d02b38");
 
     public static IServiceCollection AddPartCleaning(
         this IServiceCollection services,
