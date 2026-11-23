@@ -403,3 +403,7 @@ static Sa.RangeExtensions.IsEmpty<T>(this Sa.HalfSection<T>! self) -> bool
 static Sa.RangeExtensions.GetLength(this Sa.Section<long>! range) -> long
 static Sa.RangeExtensions.GetLength(this Sa.Section<float>! range) -> float
 static Sa.RangeExtensions.GetLength(this Sa.Section<double>! range) -> double
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator <(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator <=(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator >(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool
+static Sa.Partitional.PostgreSql.Enumeration<T>.operator >=(Sa.Partitional.PostgreSql.Enumeration<T!>? left, Sa.Partitional.PostgreSql.Enumeration<T!>? right) -> bool

@@ -92,7 +92,7 @@ using Sa.Media.FFmpeg;
 // Must resolve the bundled binary (AppContext.BaseDirectory/sa/native), not a system FFmpeg,
 // and must be able to actually run it.
 Console.WriteLine(IFFMpegExecutor.Default.Executor.ExecutablePath);
-Console.WriteLine((await IFFMpegExecutor.Default.GetVersion()).Split('\n')[0]);
+Console.WriteLine((await IFFMpegExecutor.Default.GetVersionAsync()).Split('\n')[0]);
 EOF
 
   _step "Restoring and building the consumer"

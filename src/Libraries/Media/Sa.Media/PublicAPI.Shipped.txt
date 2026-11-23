@@ -6,57 +6,6 @@ Sa.Media.WaveFormatType.IeeeFloat = 3 -> Sa.Media.WaveFormatType
 Sa.Media.WaveFormatType.Adpcm = 2 -> Sa.Media.WaveFormatType
 Sa.Media.WaveFormatType.Extensible = 65534 -> Sa.Media.WaveFormatType
 Sa.Media.WaveFormatTypeExtensions
-Sa.Media.AudioFloatPacket
-Sa.Media.AudioFloatPacket.AudioFloatPacket() -> void
-~override Sa.Media.AudioFloatPacket.ToString() -> string
-static Sa.Media.AudioFloatPacket.operator !=(Sa.Media.AudioFloatPacket left, Sa.Media.AudioFloatPacket right) -> bool
-static Sa.Media.AudioFloatPacket.operator ==(Sa.Media.AudioFloatPacket left, Sa.Media.AudioFloatPacket right) -> bool
-override Sa.Media.AudioFloatPacket.GetHashCode() -> int
-~override Sa.Media.AudioFloatPacket.Equals(object obj) -> bool
-Sa.Media.AudioFloatPacket.Equals(Sa.Media.AudioFloatPacket other) -> bool
-Sa.Media.AudioNormalizedPacket
-Sa.Media.AudioFloatPacket.Deconstruct(out int ChannelId, out float Sample, out long Position, out bool IsEof) -> void
-Sa.Media.AudioNormalizedPacket.AudioNormalizedPacket() -> void
-~override Sa.Media.AudioNormalizedPacket.ToString() -> string
-static Sa.Media.AudioNormalizedPacket.operator !=(Sa.Media.AudioNormalizedPacket left, Sa.Media.AudioNormalizedPacket right) -> bool
-static Sa.Media.AudioNormalizedPacket.operator ==(Sa.Media.AudioNormalizedPacket left, Sa.Media.AudioNormalizedPacket right) -> bool
-override Sa.Media.AudioNormalizedPacket.GetHashCode() -> int
-~override Sa.Media.AudioNormalizedPacket.Equals(object obj) -> bool
-Sa.Media.AudioNormalizedPacket.Equals(Sa.Media.AudioNormalizedPacket other) -> bool
-Sa.Media.AudioNormalizedPacket.Deconstruct(out int ChannelId, out double Sample, out long Position, out bool IsEof) -> void
-Sa.Media.AudioFloatPacket.ChannelId.get -> int
-Sa.Media.AudioFloatPacket.ChannelId.init -> void
-Sa.Media.AudioNormalizedPacket.ChannelId.get -> int
-Sa.Media.AudioNormalizedPacket.ChannelId.init -> void
-Sa.Media.AudioFloatPacket.Sample.get -> float
-Sa.Media.AudioFloatPacket.Sample.init -> void
-Sa.Media.AudioNormalizedPacket.Sample.get -> double
-Sa.Media.AudioFloatPacket.Position.get -> long
-Sa.Media.AudioFloatPacket.Position.init -> void
-Sa.Media.AudioNormalizedPacket.Sample.init -> void
-Sa.Media.AudioNormalizedPacket.Position.get -> long
-Sa.Media.AudioNormalizedPacket.Position.init -> void
-Sa.Media.AudioFloatPacket.IsEof.get -> bool
-Sa.Media.AudioNormalizedPacket.IsEof.get -> bool
-Sa.Media.AudioFloatPacket.IsEof.init -> void
-Sa.Media.AudioNormalizedPacket.IsEof.init -> void
-Sa.Media.AudioPacket.Sample.get -> System.ReadOnlyMemory<byte>
-Sa.Media.AudioPacket.ChannelId.get -> int
-Sa.Media.AudioPacket.Sample.init -> void
-Sa.Media.AudioPacket.ChannelId.init -> void
-Sa.Media.AudioPacket
-Sa.Media.AudioPacket.AudioPacket() -> void
-~override Sa.Media.AudioPacket.ToString() -> string
-static Sa.Media.AudioPacket.operator !=(Sa.Media.AudioPacket left, Sa.Media.AudioPacket right) -> bool
-static Sa.Media.AudioPacket.operator ==(Sa.Media.AudioPacket left, Sa.Media.AudioPacket right) -> bool
-override Sa.Media.AudioPacket.GetHashCode() -> int
-~override Sa.Media.AudioPacket.Equals(object obj) -> bool
-Sa.Media.AudioPacket.Equals(Sa.Media.AudioPacket other) -> bool
-Sa.Media.AudioPacket.Deconstruct(out int ChannelId, out System.ReadOnlyMemory<byte> Sample, out long Position, out bool IsEof) -> void
-Sa.Media.AudioPacket.Position.get -> long
-Sa.Media.AudioPacket.IsEof.get -> bool
-Sa.Media.AudioPacket.Position.init -> void
-Sa.Media.AudioPacket.IsEof.init -> void
 Sa.Media.TimeRange
 override Sa.Media.TimeRange.ToString() -> string!
 static Sa.Media.TimeRange.operator !=(Sa.Media.TimeRange? left, Sa.Media.TimeRange? right) -> bool
@@ -94,9 +43,6 @@ Sa.Media.Echo.CrossFeedSeparator.ProcessingMode.MinimumMemory = 2 -> Sa.Media.Ec
 Sa.Media.Echo.CrossFeedSeparator.ProcessingMode.Aggressive = 4 -> Sa.Media.Echo.CrossFeedSeparator.ProcessingMode
 Sa.Media.Echo.CrossFeedSeparator.ProcessingMode.MinimumMemoryFastNormalize = 3 -> Sa.Media.Echo.CrossFeedSeparator.ProcessingMode
 Sa.Media.Echo.CrossFeedSeparator.ProcessingMode.Auto = 0 -> Sa.Media.Echo.CrossFeedSeparator.ProcessingMode
-Sa.Media.AudioFloatPacket.AudioFloatPacket(int ChannelId, float Sample, long Position, bool IsEof) -> void
-Sa.Media.AudioNormalizedPacket.AudioNormalizedPacket(int ChannelId, double Sample, long Position, bool IsEof) -> void
-Sa.Media.AudioPacket.AudioPacket(int ChannelId, System.ReadOnlyMemory<byte> Sample, long Position, bool IsEof) -> void
 Sa.Media.AsyncWavReader.AsyncWavReader(System.IO.Pipelines.PipeReader! reader) -> void
 Sa.Media.AsyncWavReader.AsyncWavReader(System.IO.Pipelines.PipeReader! reader, bool ownsReader) -> void
 static Sa.Media.AudioEncodingExtensions.GetBytesPerSample(this Sa.Media.AudioEncoding encoding) -> int
@@ -115,7 +61,6 @@ Sa.Media.TimeRange.Duration.get -> System.TimeSpan
 static Sa.Media.TimeRangeExtensions.Contains(this Sa.Media.TimeRange! range, double milliseconds) -> bool
 Sa.Media.TimeRange.FromSeconds.get -> double
 Sa.Media.TimeRange.ToSeconds.get -> double
-static Sa.Media.TimeRange.ToChunks(params Sa.Media.TimeRange![]![]! chunks) -> Sa.Media.TimeRange![]![]!
 Sa.Media.TimeRange.Validate() -> void
 static Sa.Media.TimeRangeExtensions.Sort(this System.Span<Sa.Media.TimeRange!> ranges) -> void
 static Sa.Media.TimeRangeExtensions.Merge(this Sa.Media.TimeRange![]! ranges, int thresholdMilliseconds = 300) -> System.Collections.Generic.IReadOnlyCollection<Sa.Media.TimeRange!>!
@@ -189,11 +134,23 @@ Sa.Media.WavHeader.GetBytesPerSecond() -> long
 Sa.Media.WavHeader.CalculateCutOffsets(Sa.Media.TimeRange! range, long? fileSize = null, bool alignToFrames = true) -> (long cutFrom, long cutTo)
 static Sa.Media.Echo.CrossFeedSeparator.ExecuteAsync(Sa.Media.Echo.AudioSeparationOptions! options, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 Sa.Media.WavHeader.GetNormalizedConverter() -> System.Func<System.ReadOnlySpan<byte>, double>!
-Sa.Media.AsyncWavReader.ReadSamplesPerChannelAsync(Sa.Media.TimeRange? cutRange = null, bool allowBufferReuse = true, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioPacket>!
 static Sa.Media.TimeRangeExtensions.ExpandTimeRanges(Sa.Media.TimeRange![]![]! chunks, int thresholdMilliseconds = 300, int gapMilliseconds = 0) -> Sa.Media.TimeRange![]![]!
-Sa.Media.AsyncWavReader.ReadDoubleSamplesAsync(Sa.Media.TimeRange? cutRange = null, bool allowBufferReuse = true, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioNormalizedPacket>!
-Sa.Media.AsyncWavReader.ReadFloatSamplesAsync(Sa.Media.TimeRange? cutRange = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioFloatPacket>!
-Sa.Media.AsyncWavReader.ConvertToFormatAsync(Sa.Media.AudioEncoding targetFormat = Sa.Media.AudioEncoding.Pcm16BitSigned, Sa.Media.TimeRange? cutRange = null, bool allowBufferReuse = true, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioPacket>!
-Sa.Media.AsyncWavReader.ReadStreamableChunksAsync(Sa.Media.AudioEncoding targetFormat = Sa.Media.AudioEncoding.Pcm16BitSigned, Sa.Media.TimeRange? cutRange = null, int samplesPerBatch = 1024, bool allowBufferReuse = true, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioPacket>!
 Sa.Media.AsyncWavReader.Dispose() -> void
 Sa.Media.AsyncWavReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
+Sa.Media.AudioChunk
+Sa.Media.AudioChunk.AudioChunk() -> void
+Sa.Media.AudioChunk.AudioChunk(System.ReadOnlyMemory<byte> Samples, long Position, bool IsEof) -> void
+Sa.Media.AudioChunk.Deconstruct(out System.ReadOnlyMemory<byte> Samples, out long Position, out bool IsEof) -> void
+Sa.Media.AudioChunk.Equals(Sa.Media.AudioChunk other) -> bool
+~override Sa.Media.AudioChunk.Equals(object obj) -> bool
+override Sa.Media.AudioChunk.GetHashCode() -> int
+Sa.Media.AudioChunk.IsEof.get -> bool
+Sa.Media.AudioChunk.IsEof.init -> void
+static Sa.Media.AudioChunk.operator !=(Sa.Media.AudioChunk left, Sa.Media.AudioChunk right) -> bool
+Sa.Media.AudioChunk.Position.get -> long
+Sa.Media.AudioChunk.Position.init -> void
+Sa.Media.AudioChunk.Samples.get -> System.ReadOnlyMemory<byte>
+Sa.Media.AudioChunk.Samples.init -> void
+~override Sa.Media.AudioChunk.ToString() -> string
+static Sa.Media.AudioChunk.operator ==(Sa.Media.AudioChunk left, Sa.Media.AudioChunk right) -> bool
+Sa.Media.AsyncWavReader.ReadChannelChunksAsync(int channel, int samplesPerBatch, Sa.Media.AudioEncoding format = Sa.Media.AudioEncoding.Pcm16BitSigned, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<Sa.Media.AudioChunk>!
