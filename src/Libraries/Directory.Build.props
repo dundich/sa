@@ -4,7 +4,7 @@
 
   <PropertyGroup>
     <IsPackable>true</IsPackable>
-    <Version>0.21.0</Version>
+    <Version>0.22.0</Version>
 
     <!--
       Libraries are consumed by Native AOT applications, so annotate them for AOT and
