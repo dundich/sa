@@ -1,5 +1,6 @@
 using Sa.Outbox.Delivery;
 using Sa.Outbox.PostgreSql.Configuration;
+using Sa.Outbox.PostgreSql.Tracking;
 using System.Text;
 
 namespace Sa.Outbox.PostgreSql.SqlBuilder;
@@ -661,13 +662,15 @@ ORDER BY {settings.Offset.Fields.ConsumerGroup}
     // The task, delivery and error tables are created lazily (on the first load / first error), so a
     // tracker call against a fresh deployment must not assume they exist. One pg_catalog lookup tells
     // the tracker which of the four tables it may query; names are bound as values, so quoting is a
-    // non-issue here.
+    // non-issue here. `relkind` is filtered because pg_class also holds views, sequences, indexes and
+    // toast tables: any of those sharing a name would be reported as a table that may be queried.
     public readonly string SqlTrackExistingTables = $"""
 SELECT c.relname
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname={SqlParam.TrackSchema}
   AND c.relname=ANY({SqlParam.TrackTables})
+  AND c.relkind IN ('r','p')
 ;
 """;
 
@@ -725,6 +728,11 @@ LEFT JOIN {settings.GetQualifiedTaskTableName()} t
             ? $"ORDER BY m.{msg.MsgSeq}, t.{task.ConsumerGroup}"
             : $"ORDER BY m.{msg.MsgSeq}";
 
+        // One row too many: the tracker reads at most TrackingLimits.MaxRows rows and fails when it
+        // sees more, so the LIMIT is what keeps the row set (and the fold over it) bounded while the
+        // check stays loud instead of returning a truncated trace.
+        string limit = $"LIMIT {TrackingLimits.MaxRows + 1}";
+
         return $"""
 SELECT
   m.{msg.MsgId} AS "{SqlTrackColumn.MessageId}",
@@ -741,6 +749,7 @@ WHERE
   AND m.{msg.MsgCreatedAt}<={SqlParam.WindowTo}
   AND {keyPredicate}
 {partLine}{orderBy}
+{limit}
 ;
 """;
     }

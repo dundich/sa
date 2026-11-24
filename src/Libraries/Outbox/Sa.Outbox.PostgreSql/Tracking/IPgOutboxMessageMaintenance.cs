@@ -47,7 +47,10 @@ public interface IPgOutboxMessageMaintenance
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The number of task rows reset.</returns>
     /// <exception cref="ArgumentException"><paramref name="payloadId"/>, <paramref name="consumerGroup"/> or <paramref name="part"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<int> RequeueAsync(
         string payloadId,
         int tenantId,
@@ -69,7 +72,10 @@ public interface IPgOutboxMessageMaintenance
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The number of task rows reset.</returns>
     /// <exception cref="ArgumentException"><paramref name="consumerGroup"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<int> RequeueByMessageIdAsync(
         Guid messageId,
         int tenantId,
@@ -92,7 +98,10 @@ public interface IPgOutboxMessageMaintenance
     /// <param name="toDate">End of the data window (inclusive). Defaults to the current time.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The number of task rows reset (0 or 1).</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<int> RequeueTaskAsync(
         long taskId,
         int tenantId,

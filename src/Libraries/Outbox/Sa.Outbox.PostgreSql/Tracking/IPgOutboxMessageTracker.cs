@@ -50,7 +50,13 @@ public interface IPgOutboxMessageTracker
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The messages in publish order, each with its per-group states.</returns>
     /// <exception cref="ArgumentException"><paramref name="payloadId"/> or <paramref name="part"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="InvalidOperationException">The read would return more than
+    /// <see cref="TrackingLimits.MaxRows"/> rows. Narrow the window or pass a part — a trace larger
+    /// than that belongs in <see cref="SearchAsync"/>, which pages.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<IReadOnlyList<PgOutboxMessageTrace>> GetAsync(
         string payloadId,
         int tenantId,
@@ -76,7 +82,13 @@ public interface IPgOutboxMessageTracker
     /// <returns>The matching messages in publish order, each with its per-group states.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="payloadIds"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="part"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="InvalidOperationException">The read would return more than
+    /// <see cref="TrackingLimits.MaxRows"/> rows. Narrow the window, pass a part, or look the ids up
+    /// in smaller batches.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<IReadOnlyList<PgOutboxMessageTrace>> GetManyAsync(
         IReadOnlyCollection<string> payloadIds,
         int tenantId,
@@ -100,7 +112,12 @@ public interface IPgOutboxMessageTracker
     /// <param name="toDate">End of the data window (inclusive). Defaults to the current time.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The message with its per-group states, or <see langword="null"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="InvalidOperationException">The message has more than
+    /// <see cref="TrackingLimits.MaxRows"/> consumer groups.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<PgOutboxMessageTrace?> GetByMessageIdAsync(
         Guid messageId,
         int tenantId,
@@ -147,7 +164,10 @@ public interface IPgOutboxMessageTracker
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>One row per group and status, ordered by group then status.</returns>
     /// <exception cref="ArgumentException"><paramref name="consumerGroup"/> or <paramref name="part"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<IReadOnlyList<PgOutboxStatusCount>> CountAsync(
         int tenantId,
         string? consumerGroup = null,
@@ -166,7 +186,10 @@ public interface IPgOutboxMessageTracker
     /// <param name="toDate">End of the data window (inclusive). Defaults to the current time.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The payload, or <see langword="null"/> when the message is not in the window.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The resolved window is empty: <paramref name="fromDate"/>
+    /// (or the default seven-day lookback from <paramref name="toDate"/>) is not earlier than
+    /// <paramref name="toDate"/> (or the current time). The parameter named in the exception is the
+    /// one the caller supplied.</exception>
     ValueTask<PgOutboxMessagePayload?> GetPayloadAsync(
         Guid messageId,
         int tenantId,
@@ -203,7 +226,7 @@ public interface IPgOutboxMessageTracker
     /// <exception cref="ArgumentException"><see cref="PgOutboxTaskQuery.ConsumerGroup"/> or <see cref="PgOutboxTaskQuery.Part"/> is empty or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <see cref="PgOutboxTaskQuery.Limit"/> is not between 1 and <see cref="PgOutboxTaskQuery.MaxLimit"/>,
-    /// or the window end is not later than its start.
+    /// or the resolved window is empty (its start is not earlier than its end).
     /// </exception>
     ValueTask<IReadOnlyList<PgOutboxTaskEntry>> SearchAsync(
         PgOutboxTaskQuery query,
@@ -224,11 +247,13 @@ public interface IPgOutboxMessageTracker
     /// <param name="consumerGroup">The consumer group to read, or <see langword="null"/> for all groups.</param>
     /// <param name="fromDate">Start of the data window (inclusive). Defaults to seven days before <paramref name="toDate"/>.</param>
     /// <param name="toDate">End of the data window (inclusive). Defaults to the current time.</param>
-    /// <param name="limit">The maximum number of attempts to return, newest first before the result is ordered.</param>
+    /// <param name="limit">The maximum number of attempts to return, newest first before the result is ordered.
+    /// Capped at <see cref="TrackingLimits.MaxRows"/>; the newest attempts are kept.</param>
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>The attempts in chronological order, or an empty list when there are none.</returns>
     /// <exception cref="ArgumentException"><paramref name="payloadId"/> or <paramref name="consumerGroup"/> is empty or whitespace.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="toDate"/> is not later than <paramref name="fromDate"/>, or <paramref name="limit"/> is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="limit"/> is not between 1 and
+    /// <see cref="TrackingLimits.MaxRows"/>, or the resolved window is empty (its start is not earlier than its end).</exception>
     ValueTask<IReadOnlyList<PgOutboxDeliveryAttempt>> GetHistoryAsync(
         string payloadId,
         int tenantId,

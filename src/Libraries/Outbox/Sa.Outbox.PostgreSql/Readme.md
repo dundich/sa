@@ -284,7 +284,9 @@ duplicates collapsed. `CountAsync` returns one row per `(group, status)` with `C
 deserialize with the same `IOutboxMessageSerializer` the provider uses.
 
 `SearchAsync` is the dashboard query. Its unit is a **task**, not a message — status, attempts and the
-lease belong to one consumer group — and it pages by keyset, so a deep page costs the same as the first:
+lease belong to one consumer group — and it pages by keyset, so a deep page costs the same as the first
+*in OFFSET terms*: no skipped rows, just the cursor comparison (the sort itself still covers the whole
+window, see below):
 
 ```csharp
 IReadOnlyList<PgOutboxTaskEntry> failing = await tracker.SearchAsync(new PgOutboxTaskQuery
@@ -350,7 +352,18 @@ Caveats: `msg_payload_id` is **not unique**, so the result is a list; `msg_seq` 
 delivery order; rows older than `DropPartsAfterRetention` (30 days by default) are gone with their
 partitions; a publish inside the caller's transaction is invisible to the tracker until that
 transaction commits; and `msg_payload_id` is not indexed, so the lookup scans the matching daily
-leaves — pass a narrow `part`/`fromDate` for large tables.
+leaves — pass a narrow `part`/`fromDate` for large tables. The same query then joins the task window on
+`task.msg_id`, which carries no index either (the task primary key leads with `task_id`), so that side
+is a scan of the window's task leaves; the tenant predicate arrives through the join rather than as a
+constant, so how well the partitions prune is planner-dependent — check `EXPLAIN` on a large queue
+before assuming the trace lookup is cheap.
+
+`GetAsync`/`GetManyAsync`/`GetByMessageIdAsync` fail with `InvalidOperationException` above
+`TrackingLimits.MaxRows` (5000) rows rather than returning a truncated trace, and `GetHistoryAsync`
+caps `limit` at the same number; `SearchAsync` keeps its own `PgOutboxTaskQuery.MaxLimit` (1000). The
+bound is part of the statement, not just of the reader: the `SqlTrackMessagesBy*`/`SqlTrackMessageById*`
+templates in `SqlOutboxBuilder` end with `LIMIT 5001`, so a copy executed by hand cannot return more
+either — the extra row is what makes the cap fail loudly instead of truncating silently.
 
 ---
 

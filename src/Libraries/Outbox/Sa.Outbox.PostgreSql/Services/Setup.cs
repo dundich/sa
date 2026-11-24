@@ -41,11 +41,20 @@ internal static class Setup
         // Read-only diagnostic surface. TimeProvider is optional: the core publisher requires one, but
         // a publish-only deployment registers no delivery module, and the tracker can fall back to the
         // system clock (its only use of the clock is the default window and "has the lease expired").
+        // The catalog probe is a per-scope singleton: its whole point is remembering which lazily
+        // created tables exist, so sharing it between the tracker and the maintenance (and between
+        // calls) is what removes the per-call pg_catalog round trip.
+        services.TryAddKeyedSingleton<PgOutboxStorageTablesProbe>(scopeKey, (sp, _) =>
+            new PgOutboxStorageTablesProbe(
+                PgDataSourceResolver.Resolve(sp, scopeKey),
+                sp.GetRequiredKeyedService<SqlOutboxBuilder>(scopeKey),
+                sp.GetRequiredKeyedService<PgOutboxTableSettings>(scopeKey)));
+
         services.TryAddKeyedSingleton<IPgOutboxMessageTracker>(scopeKey, (sp, _) =>
             new PgOutboxMessageTracker(
                 PgDataSourceResolver.Resolve(sp, scopeKey),
                 sp.GetRequiredKeyedService<SqlOutboxBuilder>(scopeKey),
-                sp.GetRequiredKeyedService<PgOutboxTableSettings>(scopeKey),
+                sp.GetRequiredKeyedService<PgOutboxStorageTablesProbe>(scopeKey),
                 sp.GetService<TimeProvider>()));
 
         // The write half of the diagnostic surface: requeueing a settled delivery. Deliberately not
@@ -54,7 +63,7 @@ internal static class Setup
             new PgOutboxMessageMaintenance(
                 PgDataSourceResolver.Resolve(sp, scopeKey),
                 sp.GetRequiredKeyedService<SqlOutboxBuilder>(scopeKey),
-                sp.GetRequiredKeyedService<PgOutboxTableSettings>(scopeKey),
+                sp.GetRequiredKeyedService<PgOutboxStorageTablesProbe>(scopeKey),
                 sp.GetService<TimeProvider>()));
 
         if (string.Equals(scopeKey, OutboxScope.DefaultKey, StringComparison.Ordinal))

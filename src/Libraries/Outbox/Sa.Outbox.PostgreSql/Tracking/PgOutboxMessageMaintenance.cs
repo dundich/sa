@@ -1,6 +1,5 @@
 using Npgsql;
 using Sa.Data.PostgreSql;
-using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Tracking;
@@ -12,7 +11,7 @@ namespace Sa.Outbox.PostgreSql.Tracking;
 internal sealed class PgOutboxMessageMaintenance(
     IPgDataSource dataSource,
     SqlOutboxBuilder sql,
-    PgOutboxTableSettings settings,
+    PgOutboxStorageTablesProbe storage,
     TimeProvider? timeProvider = null) : IPgOutboxMessageMaintenance
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -114,20 +113,24 @@ internal sealed class PgOutboxMessageMaintenance(
         Action<NpgsqlCommand> bind,
         CancellationToken cancellationToken)
     {
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-
         // No task table means no group has ever loaded anything: there is nothing to requeue.
-        if (!tables.Task) return 0;
+        // The probe remembers a "yes" for the life of the process, so a warm deployment skips
+        // the catalog entirely.
+        return await storage.ReadAsync(async token =>
+        {
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Task, token).ConfigureAwait(false))
+            {
+                return 0;
+            }
 
-        await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnectionAsync(cancellationToken)
-            .ConfigureAwait(false);
+            await using NpgsqlConnection connection = await dataSource
+                .OpenDbConnectionAsync(token)
+                .ConfigureAwait(false);
 
-        await using var command = new NpgsqlCommand(query, connection);
-        bind(command);
+            await using var command = new NpgsqlCommand(query, connection);
+            bind(command);
 
-        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            return await command.ExecuteNonQueryAsync(token).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 }

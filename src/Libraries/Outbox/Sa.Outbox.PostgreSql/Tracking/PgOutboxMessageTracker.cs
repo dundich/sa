@@ -3,7 +3,6 @@ using NpgsqlTypes;
 using Sa.Data.PostgreSql;
 using Sa.Extensions;
 using Sa.Outbox.Delivery;
-using Sa.Outbox.PostgreSql.Configuration;
 using Sa.Outbox.PostgreSql.SqlBuilder;
 
 namespace Sa.Outbox.PostgreSql.Tracking;
@@ -19,15 +18,17 @@ namespace Sa.Outbox.PostgreSql.Tracking;
 /// ambiguous duplicate column names in a self-join).
 /// </para>
 /// <para>
-/// Nothing here retries. These are diagnostic reads: the caller decides whether a transient failure
-/// is worth repeating, and the provider's <c>PgRetryStrategy</c> exists for the delivery path, which
-/// must not lose a batch.
+/// Nothing here retries a transient failure. These are diagnostic reads: the caller decides whether a
+/// transient failure is worth repeating, and the provider's <c>PgRetryStrategy</c> exists for the
+/// delivery path, which must not lose a batch. The one retry that does exist is inside
+/// <see cref="PgOutboxStorageTablesProbe.ReadAsync{T}"/> and re-runs a read whose table set turned
+/// out to be stale — it never repeats a statement that failed for any other reason.
 /// </para>
 /// </remarks>
 internal sealed class PgOutboxMessageTracker(
     IPgDataSource dataSource,
     SqlOutboxBuilder sql,
-    PgOutboxTableSettings settings,
+    PgOutboxStorageTablesProbe storage,
     TimeProvider? timeProvider = null) : IPgOutboxMessageTracker
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
@@ -47,34 +48,39 @@ internal sealed class PgOutboxMessageTracker(
 
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) = TrackingWindow.Resolve(_timeProvider, fromDate, toDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-        if (!tables.Message) return [];
-
-        string query = (part is null, tables.Task) switch
+        return await storage.ReadAsync<IReadOnlyList<PgOutboxMessageTrace>>(async token =>
         {
-            (true, true) => sql.SqlTrackMessagesByPayload,
-            (false, true) => sql.SqlTrackMessagesByPayloadAndPart,
-            (true, false) => sql.SqlTrackMessagesByPayloadNoTask,
-            (false, false) => sql.SqlTrackMessagesByPayloadAndPartNoTask,
-        };
-
-        List<TraceRow> rows = await ReadTracesAsync(
-            query,
-            command =>
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Message, token).ConfigureAwait(false))
             {
-                command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-                command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.PayloadId, payloadId));
-                command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-                command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+                return [];
+            }
 
-                if (part is not null)
-                    command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, part));
-            },
-            cancellationToken).ConfigureAwait(false);
+            bool hasTask = await storage.ExistsAsync(PgOutboxStorageTable.Task, token).ConfigureAwait(false);
 
-        return await ToTracesAsync(rows, tables, windowFrom, windowTo, cancellationToken).ConfigureAwait(false);
+            string query = (part is null, hasTask) switch
+            {
+                (true, true) => sql.SqlTrackMessagesByPayload,
+                (false, true) => sql.SqlTrackMessagesByPayloadAndPart,
+                (true, false) => sql.SqlTrackMessagesByPayloadNoTask,
+                (false, false) => sql.SqlTrackMessagesByPayloadAndPartNoTask,
+            };
+
+            List<TraceRow> rows = await ReadTracesAsync(
+                query,
+                command =>
+                {
+                    command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+                    command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.PayloadId, payloadId));
+                    command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+                    command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+
+                    if (part is not null)
+                        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, part));
+                },
+                token).ConfigureAwait(false);
+
+            return await ToTracesAsync(rows, windowFrom, windowTo, token).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<PgOutboxMessageTrace>> GetManyAsync(
@@ -102,35 +108,39 @@ internal sealed class PgOutboxMessageTracker(
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) =
             TrackingWindow.Resolve(_timeProvider, fromDate, toDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!tables.Message) return [];
-
-        string query = (part is null, tables.Task) switch
+        return await storage.ReadAsync<IReadOnlyList<PgOutboxMessageTrace>>(async token =>
         {
-            (true, true) => sql.SqlTrackMessagesByPayloads,
-            (false, true) => sql.SqlTrackMessagesByPayloadsAndPart,
-            (true, false) => sql.SqlTrackMessagesByPayloadsNoTask,
-            (false, false) => sql.SqlTrackMessagesByPayloadsAndPartNoTask,
-        };
-
-        List<TraceRow> rows = await ReadTracesAsync(
-            query,
-            command =>
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Message, token).ConfigureAwait(false))
             {
-                command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-                command.Parameters.Add(new NpgsqlParameter<string[]>(SqlParam.PayloadIds, ids));
-                command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-                command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+                return [];
+            }
 
-                if (part is not null)
-                    command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, part));
-            },
-            cancellationToken).ConfigureAwait(false);
+            bool hasTask = await storage.ExistsAsync(PgOutboxStorageTable.Task, token).ConfigureAwait(false);
 
-        return await ToTracesAsync(rows, tables, windowFrom, windowTo, cancellationToken).ConfigureAwait(false);
+            string query = (part is null, hasTask) switch
+            {
+                (true, true) => sql.SqlTrackMessagesByPayloads,
+                (false, true) => sql.SqlTrackMessagesByPayloadsAndPart,
+                (true, false) => sql.SqlTrackMessagesByPayloadsNoTask,
+                (false, false) => sql.SqlTrackMessagesByPayloadsAndPartNoTask,
+            };
+
+            List<TraceRow> rows = await ReadTracesAsync(
+                query,
+                command =>
+                {
+                    command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+                    command.Parameters.Add(new NpgsqlParameter<string[]>(SqlParam.PayloadIds, ids));
+                    command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+                    command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+
+                    if (part is not null)
+                        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.MsgPart, part));
+                },
+                token).ConfigureAwait(false);
+
+            return await ToTracesAsync(rows, windowFrom, windowTo, token).ConfigureAwait(false);
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<PgOutboxMessageTrace?> GetByMessageIdAsync(
@@ -142,64 +152,71 @@ internal sealed class PgOutboxMessageTracker(
     {
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) = TrackingWindow.Resolve(_timeProvider, fromDate, toDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-        if (!tables.Message) return null;
-
-        List<TraceRow> rows = await ReadTracesAsync(
-            tables.Task ? sql.SqlTrackMessageById : sql.SqlTrackMessageByIdNoTask,
-            command =>
+        return await storage.ReadAsync<PgOutboxMessageTrace?>(async token =>
+        {
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Message, token).ConfigureAwait(false))
             {
-                command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-                command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.MsgId, messageId));
-                command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-                command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
-            },
-            cancellationToken).ConfigureAwait(false);
+                return null;
+            }
 
-        IReadOnlyList<PgOutboxMessageTrace> traces =
-            await ToTracesAsync(rows, tables, windowFrom, windowTo, cancellationToken).ConfigureAwait(false);
+            bool hasTask = await storage.ExistsAsync(PgOutboxStorageTable.Task, token).ConfigureAwait(false);
 
-        return traces.Count == 0 ? null : traces[0];
+            List<TraceRow> rows = await ReadTracesAsync(
+                hasTask ? sql.SqlTrackMessageById : sql.SqlTrackMessageByIdNoTask,
+                command =>
+                {
+                    command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+                    command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.MsgId, messageId));
+                    command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+                    command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+                },
+                token).ConfigureAwait(false);
+
+            IReadOnlyList<PgOutboxMessageTrace> traces =
+                await ToTracesAsync(rows, windowFrom, windowTo, token).ConfigureAwait(false);
+
+            return traces.Count == 0 ? null : traces[0];
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<PgOutboxConsumerGroup>> GetConsumerGroupsAsync(
         int tenantId,
         CancellationToken cancellationToken = default)
     {
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!tables.Offset) return [];
-
-        await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnectionAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        await using var command = new NpgsqlCommand(sql.SqlTrackConsumerGroups, connection);
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-
-        List<PgOutboxConsumerGroup> groups = [];
-
-        await using NpgsqlDataReader reader = await command
-            .ExecuteReaderAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        return await storage.ReadAsync<IReadOnlyList<PgOutboxConsumerGroup>>(async token =>
         {
-            groups.Add(new PgOutboxConsumerGroup
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Offset, token).ConfigureAwait(false))
             {
-                // The column is nullable in the DDL, although it is half of the primary key.
-                ConsumerGroup = reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
-                TenantId = reader.GetInt32(1),
-                OffsetSeq = reader.GetInt64(2),
-                UpdatedAt = reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
-            });
-        }
+                return [];
+            }
 
-        return groups;
+            await using NpgsqlConnection connection = await dataSource
+                .OpenDbConnectionAsync(token)
+                .ConfigureAwait(false);
+
+            await using var command = new NpgsqlCommand(sql.SqlTrackConsumerGroups, connection);
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+
+            List<PgOutboxConsumerGroup> groups = [];
+
+            await using NpgsqlDataReader reader = await command
+                .ExecuteReaderAsync(token)
+                .ConfigureAwait(false);
+
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                groups.Add(new PgOutboxConsumerGroup
+                {
+                    // The column is nullable in the DDL, although it is half of the primary key.
+                    ConsumerGroup = reader.IsDBNull(0) ? string.Empty : reader.GetString(0),
+                    TenantId = reader.GetInt32(1),
+                    OffsetSeq = reader.GetInt64(2),
+                    UpdatedAt = reader.IsDBNull(3) ? null : reader.GetFieldValue<DateTimeOffset>(3),
+                });
+            }
+
+            return groups;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<PgOutboxStatusCount>> CountAsync(
@@ -216,44 +233,46 @@ internal sealed class PgOutboxMessageTracker(
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) =
             TrackingWindow.Resolve(_timeProvider, fromDate, toDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!tables.Task) return [];
-
-        await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnectionAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        await using var command = new NpgsqlCommand(sql.SqlTrackCounts, connection);
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(
-            SqlParam.NowDate,
-            _timeProvider.GetUtcNow().ToUnixTimeSeconds()));
-        TrackingParameters.AddOptionalText(command, SqlParam.ConsumerGroupId, consumerGroup);
-        TrackingParameters.AddOptionalText(command, SqlParam.MsgPart, part);
-
-        List<PgOutboxStatusCount> counts = [];
-
-        await using NpgsqlDataReader reader = await command
-            .ExecuteReaderAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        return await storage.ReadAsync<IReadOnlyList<PgOutboxStatusCount>>(async token =>
         {
-            counts.Add(new PgOutboxStatusCount
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Task, token).ConfigureAwait(false))
             {
-                ConsumerGroup = reader.GetString(0),
-                StatusCode = (DeliveryStatusCode)reader.GetInt32(1),
-                Count = reader.GetInt64(2),
-                Stuck = reader.GetInt64(3),
-            });
-        }
+                return [];
+            }
 
-        return counts;
+            await using NpgsqlConnection connection = await dataSource
+                .OpenDbConnectionAsync(token)
+                .ConfigureAwait(false);
+
+            await using var command = new NpgsqlCommand(sql.SqlTrackCounts, connection);
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<long>(
+                SqlParam.NowDate,
+                _timeProvider.GetUtcNow().ToUnixTimeSeconds()));
+            TrackingParameters.AddOptionalText(command, SqlParam.ConsumerGroupId, consumerGroup);
+            TrackingParameters.AddOptionalText(command, SqlParam.MsgPart, part);
+
+            List<PgOutboxStatusCount> counts = [];
+
+            await using NpgsqlDataReader reader = await command
+                .ExecuteReaderAsync(token)
+                .ConfigureAwait(false);
+
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                counts.Add(new PgOutboxStatusCount
+                {
+                    ConsumerGroup = reader.GetString(0),
+                    StatusCode = (DeliveryStatusCode)reader.GetInt32(1),
+                    Count = reader.GetInt64(2),
+                    Stuck = reader.GetInt64(3),
+                });
+            }
+
+            return counts;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<PgOutboxMessagePayload?> GetPayloadAsync(
@@ -266,41 +285,45 @@ internal sealed class PgOutboxMessageTracker(
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) =
             TrackingWindow.Resolve(_timeProvider, fromDate, toDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!tables.Message) return null;
-
-        await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnectionAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        await using var command = new NpgsqlCommand(
-            tables.Type ? sql.SqlTrackPayload : sql.SqlTrackPayloadNoType,
-            connection);
-
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-        command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.MsgId, messageId));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
-
-        await using NpgsqlDataReader reader = await command
-            .ExecuteReaderAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false)) return null;
-
-        return new PgOutboxMessagePayload
+        return await storage.ReadAsync<PgOutboxMessagePayload?>(async token =>
         {
-            MessageId = reader.GetGuid(0),
-            PayloadTypeId = reader.GetInt64(1),
-            PayloadType = reader.IsDBNull(2) ? null : reader.GetString(2),
-            Size = reader.GetInt32(3),
-            Payload = reader.IsDBNull(4)
-                ? ReadOnlyMemory<byte>.Empty
-                : new ReadOnlyMemory<byte>(reader.GetFieldValue<byte[]>(4)),
-        };
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Message, token).ConfigureAwait(false))
+            {
+                return null;
+            }
+
+            bool hasType = await storage.ExistsAsync(PgOutboxStorageTable.Type, token).ConfigureAwait(false);
+
+            await using NpgsqlConnection connection = await dataSource
+                .OpenDbConnectionAsync(token)
+                .ConfigureAwait(false);
+
+            await using var command = new NpgsqlCommand(
+                hasType ? sql.SqlTrackPayload : sql.SqlTrackPayloadNoType,
+                connection);
+
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+            command.Parameters.Add(new NpgsqlParameter<Guid>(SqlParam.MsgId, messageId));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+
+            await using NpgsqlDataReader reader = await command
+                .ExecuteReaderAsync(token)
+                .ConfigureAwait(false);
+
+            if (!await reader.ReadAsync(token).ConfigureAwait(false)) return null;
+
+            return new PgOutboxMessagePayload
+            {
+                MessageId = reader.GetGuid(0),
+                PayloadTypeId = reader.GetInt64(1),
+                PayloadType = reader.IsDBNull(2) ? null : reader.GetString(2),
+                Size = reader.GetInt32(3),
+                Payload = reader.IsDBNull(4)
+                    ? ReadOnlyMemory<byte>.Empty
+                    : new ReadOnlyMemory<byte>(reader.GetFieldValue<byte[]>(4)),
+            };
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<PgOutboxTaskEntry>> SearchAsync(
@@ -322,79 +345,81 @@ internal sealed class PgOutboxMessageTracker(
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) =
             TrackingWindow.Resolve(_timeProvider, query.FromDate, query.ToDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (!tables.Task) return [];
-
         // An empty status set must match nothing, not everything: it can only be a caller mistake, and
         // silently dropping the filter would return the whole queue instead.
         int[]? statuses = query.Statuses is null
             ? null
             : [.. query.Statuses.Select(s => (int)s).Distinct()];
 
-        await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnectionAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        await using var command = new NpgsqlCommand(sql.SqlTrackSearch, connection);
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, query.TenantId));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, query.Limit));
-
-        TrackingParameters.AddOptionalText(command, SqlParam.ConsumerGroupId, query.ConsumerGroup);
-        TrackingParameters.AddOptionalText(command, SqlParam.MsgPart, query.Part);
-
-        command.Parameters.Add(new NpgsqlParameter(SqlParam.Statuses, NpgsqlDbType.Array | NpgsqlDbType.Integer)
-        {
-            Value = statuses ?? (object)DBNull.Value,
-        });
-
-        // Typed nullable longs: the statement guards the cursor comparison with `@cur_seq IS NULL`, and
-        // an untyped null cannot be bound to a bigint comparison.
-        command.Parameters.Add(new NpgsqlParameter<long?>(SqlParam.CursorSeq, query.After?.MsgSeq));
-        command.Parameters.Add(new NpgsqlParameter<long?>(SqlParam.CursorTask, query.After?.TaskId));
-
         long nowUnix = _timeProvider.GetUtcNow().ToUnixTimeSeconds();
 
-        List<PgOutboxTaskEntry> entries = [];
-
-        await using NpgsqlDataReader reader = await command
-            .ExecuteReaderAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        return await storage.ReadAsync<IReadOnlyList<PgOutboxTaskEntry>>(async token =>
         {
-            var status = (DeliveryStatusCode)reader.GetInt32(8);
-            long lockExpiresOn = reader.IsDBNull(12) ? 0 : reader.GetInt64(12);
-            long errorId = reader.IsDBNull(13) ? 0 : reader.GetInt64(13);
-
-            entries.Add(new PgOutboxTaskEntry
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Task, token).ConfigureAwait(false))
             {
-                TaskId = reader.GetInt64(0),
-                ConsumerGroup = reader.GetString(1),
-                MessageId = reader.GetGuid(2),
-                MsgSeq = reader.GetInt64(3),
-                PayloadId = reader.GetString(4),
-                TenantId = query.TenantId,
-                Part = reader.GetString(5),
-                MessageCreatedAt = reader.GetInt64(6).ToDateTimeOffsetFromUnixTimestamp(),
-                TaskCreatedAt = reader.GetInt64(7).ToDateTimeOffsetFromUnixTimestamp(),
-                StatusCode = status,
-                StatusMessage = reader.GetString(9),
-                Attempt = reader.GetInt32(10),
-                DeliveredAt = ReadOptionalTimestamp(reader, 11),
-                LockExpiresOn = lockExpiresOn > 0
-                    ? lockExpiresOn.ToDateTimeOffsetFromUnixTimestamp()
-                    : null,
-                ErrorId = errorId > 0 ? errorId : null,
-                IsStuck = status == DeliveryStatusCode.Processing && lockExpiresOn < nowUnix,
-            });
-        }
+                return [];
+            }
 
-        return entries;
+            await using NpgsqlConnection connection = await dataSource
+                .OpenDbConnectionAsync(token)
+                .ConfigureAwait(false);
+
+            await using var command = new NpgsqlCommand(sql.SqlTrackSearch, connection);
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, query.TenantId));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, query.Limit));
+
+            TrackingParameters.AddOptionalText(command, SqlParam.ConsumerGroupId, query.ConsumerGroup);
+            TrackingParameters.AddOptionalText(command, SqlParam.MsgPart, query.Part);
+
+            command.Parameters.Add(new NpgsqlParameter(SqlParam.Statuses, NpgsqlDbType.Array | NpgsqlDbType.Integer)
+            {
+                Value = statuses ?? (object)DBNull.Value,
+            });
+
+            // Typed nullable longs: the statement guards the cursor comparison with `@cur_seq IS NULL`,
+            // and an untyped null cannot be bound to a bigint comparison.
+            command.Parameters.Add(new NpgsqlParameter<long?>(SqlParam.CursorSeq, query.After?.MsgSeq));
+            command.Parameters.Add(new NpgsqlParameter<long?>(SqlParam.CursorTask, query.After?.TaskId));
+
+            List<PgOutboxTaskEntry> entries = [];
+
+            await using NpgsqlDataReader reader = await command
+                .ExecuteReaderAsync(token)
+                .ConfigureAwait(false);
+
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                var status = (DeliveryStatusCode)reader.GetInt32(8);
+                long lockExpiresOn = reader.IsDBNull(12) ? 0 : reader.GetInt64(12);
+                long errorId = reader.IsDBNull(13) ? 0 : reader.GetInt64(13);
+
+                entries.Add(new PgOutboxTaskEntry
+                {
+                    TaskId = reader.GetInt64(0),
+                    ConsumerGroup = reader.GetString(1),
+                    MessageId = reader.GetGuid(2),
+                    MsgSeq = reader.GetInt64(3),
+                    PayloadId = reader.GetString(4),
+                    TenantId = query.TenantId,
+                    Part = reader.GetString(5),
+                    MessageCreatedAt = reader.GetInt64(6).ToDateTimeOffsetFromUnixTimestamp(),
+                    TaskCreatedAt = reader.GetInt64(7).ToDateTimeOffsetFromUnixTimestamp(),
+                    StatusCode = status,
+                    StatusMessage = reader.GetString(9),
+                    Attempt = reader.GetInt32(10),
+                    DeliveredAt = ReadOptionalTimestamp(reader, 11),
+                    LockExpiresOn = lockExpiresOn > 0
+                        ? lockExpiresOn.ToDateTimeOffsetFromUnixTimestamp()
+                        : null,
+                    ErrorId = errorId > 0 ? errorId : null,
+                    IsStuck = status == DeliveryStatusCode.Processing && lockExpiresOn < nowUnix,
+                });
+            }
+
+            return entries;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     public async ValueTask<IReadOnlyList<PgOutboxDeliveryAttempt>> GetHistoryAsync(
@@ -408,84 +433,95 @@ internal sealed class PgOutboxMessageTracker(
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(payloadId);
         if (consumerGroup is not null) ArgumentException.ThrowIfNullOrWhiteSpace(consumerGroup);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
+
+        // Capped like every other read: the LIMIT is bound as a parameter, so an over-sized page is
+        // rejected before the statement is sent rather than after the rows have been allocated.
+        if (limit is < 1 or > TrackingLimits.MaxRows)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(limit),
+                limit,
+                $"limit must be between 1 and {TrackingLimits.MaxRows}.");
+        }
 
         (DateTimeOffset windowFrom, DateTimeOffset windowTo) = TrackingWindow.Resolve(_timeProvider, fromDate, toDate);
 
-        PgOutboxStorageTables tables = await PgOutboxStorageTables
-            .LoadAsync(dataSource, sql, settings, cancellationToken)
-            .ConfigureAwait(false);
-        if (!tables.Delivery) return [];
-
-        await using NpgsqlConnection connection = await dataSource
-            .OpenDbConnectionAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        await using var command = new NpgsqlCommand(sql.SqlTrackHistory, connection);
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
-        command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.PayloadId, payloadId));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
-        command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, limit));
-
-        // Explicit NpgsqlDbType: an untyped NULL parameter cannot be bound to the `@gr IS NULL`
-        // predicate, and Npgsql refuses to infer the type of a null value.
-        command.Parameters.Add(new NpgsqlParameter(SqlParam.ConsumerGroupId, NpgsqlDbType.Text)
+        return await storage.ReadAsync<IReadOnlyList<PgOutboxDeliveryAttempt>>(async token =>
         {
-            Value = consumerGroup ?? (object)DBNull.Value,
-        });
-
-        await using NpgsqlDataReader reader = await command
-            .ExecuteReaderAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        List<AttemptRow> rows = [];
-
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            rows.Add(new AttemptRow(
-                DeliveryId: reader.GetInt64(0),
-                ConsumerGroup: reader.GetString(1),
-                TaskId: reader.GetInt64(2),
-                StatusCode: (DeliveryStatusCode)reader.GetInt32(3),
-                StatusMessage: reader.GetString(4),
-                CreatedAt: reader.GetInt64(5).ToDateTimeOffsetFromUnixTimestamp(),
-                ErrorId: reader.GetInt64(6)));
-        }
-
-        // The statement returns newest first so LIMIT keeps the recent attempts; the caller gets a
-        // timeline, oldest first.
-        rows.Reverse();
-
-        Dictionary<long, ErrorDetail> errors = await ResolveErrorsAsync(
-            [.. rows.Select(r => r.ErrorId).Where(id => id > 0).Distinct()],
-            windowFrom,
-            windowTo,
-            tables,
-            cancellationToken).ConfigureAwait(false);
-
-        PgOutboxDeliveryAttempt[] attempts = new PgOutboxDeliveryAttempt[rows.Count];
-
-        for (int i = 0; i < rows.Count; i++)
-        {
-            AttemptRow row = rows[i];
-            errors.TryGetValue(row.ErrorId, out ErrorDetail? error);
-
-            attempts[i] = new PgOutboxDeliveryAttempt
+            if (!await storage.ExistsAsync(PgOutboxStorageTable.Delivery, token).ConfigureAwait(false))
             {
-                DeliveryId = row.DeliveryId,
-                ConsumerGroup = row.ConsumerGroup,
-                TaskId = row.TaskId,
-                StatusCode = row.StatusCode,
-                StatusMessage = row.StatusMessage,
-                CreatedAt = row.CreatedAt,
-                ErrorId = row.ErrorId > 0 ? row.ErrorId : null,
-                ErrorType = error?.Type,
-                ErrorMessage = error?.Message,
-            };
-        }
+                return [];
+            }
 
-        return attempts;
+            await using NpgsqlConnection connection = await dataSource
+                .OpenDbConnectionAsync(token)
+                .ConfigureAwait(false);
+
+            await using var command = new NpgsqlCommand(sql.SqlTrackHistory, connection);
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.TenantId, tenantId));
+            command.Parameters.Add(new NpgsqlParameter<string>(SqlParam.PayloadId, payloadId));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowFrom, windowFrom.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<long>(SqlParam.WindowTo, windowTo.ToUnixTimeSeconds()));
+            command.Parameters.Add(new NpgsqlParameter<int>(SqlParam.Limit, limit));
+
+            // Explicit NpgsqlDbType: an untyped NULL parameter cannot be bound to the `@gr IS NULL`
+            // predicate, and Npgsql refuses to infer the type of a null value.
+            command.Parameters.Add(new NpgsqlParameter(SqlParam.ConsumerGroupId, NpgsqlDbType.Text)
+            {
+                Value = consumerGroup ?? (object)DBNull.Value,
+            });
+
+            await using NpgsqlDataReader reader = await command
+                .ExecuteReaderAsync(token)
+                .ConfigureAwait(false);
+
+            List<AttemptRow> rows = [];
+
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                rows.Add(new AttemptRow(
+                    DeliveryId: reader.GetInt64(0),
+                    ConsumerGroup: reader.GetString(1),
+                    TaskId: reader.GetInt64(2),
+                    StatusCode: (DeliveryStatusCode)reader.GetInt32(3),
+                    StatusMessage: reader.GetString(4),
+                    CreatedAt: reader.GetInt64(5).ToDateTimeOffsetFromUnixTimestamp(),
+                    ErrorId: reader.GetInt64(6)));
+            }
+
+            // The statement returns newest first so LIMIT keeps the recent attempts; the caller gets a
+            // timeline, oldest first.
+            rows.Reverse();
+
+            Dictionary<long, ErrorDetail> errors = await ResolveErrorsAsync(
+                [.. rows.Select(r => r.ErrorId).Where(id => id > 0).Distinct()],
+                windowFrom,
+                windowTo,
+                token).ConfigureAwait(false);
+
+            PgOutboxDeliveryAttempt[] attempts = new PgOutboxDeliveryAttempt[rows.Count];
+
+            for (int i = 0; i < rows.Count; i++)
+            {
+                AttemptRow row = rows[i];
+                errors.TryGetValue(row.ErrorId, out ErrorDetail? error);
+
+                attempts[i] = new PgOutboxDeliveryAttempt
+                {
+                    DeliveryId = row.DeliveryId,
+                    ConsumerGroup = row.ConsumerGroup,
+                    TaskId = row.TaskId,
+                    StatusCode = row.StatusCode,
+                    StatusMessage = row.StatusMessage,
+                    CreatedAt = row.CreatedAt,
+                    ErrorId = row.ErrorId > 0 ? row.ErrorId : null,
+                    ErrorType = error?.Type,
+                    ErrorMessage = error?.Message,
+                };
+            }
+
+            return attempts;
+        }, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -538,6 +574,16 @@ internal sealed class PgOutboxMessageTracker(
                 ErrorId: reader.IsDBNull(14) ? 0 : reader.GetInt64(14)));
         }
 
+        if (rows.Count > TrackingLimits.MaxRows)
+        {
+            // The statement stopped at MaxRows + 1, so this is "at least", never an exact count. The
+            // result is discarded rather than truncated: a partial trace reads as "these groups have
+            // no state for the message", which is the opposite of what a truncated page would mean.
+            throw new InvalidOperationException(
+                $"The tracking read returned more than {TrackingLimits.MaxRows} rows. Narrow the "
+                + "window (fromDate/toDate), pass a part, or use SearchAsync, which pages.");
+        }
+
         return rows;
     }
 
@@ -557,7 +603,6 @@ internal sealed class PgOutboxMessageTracker(
 
     private async Task<IReadOnlyList<PgOutboxMessageTrace>> ToTracesAsync(
         List<TraceRow> rows,
-        PgOutboxStorageTables tables,
         DateTimeOffset windowFrom,
         DateTimeOffset windowTo,
         CancellationToken cancellationToken)
@@ -568,7 +613,6 @@ internal sealed class PgOutboxMessageTracker(
             [.. rows.Select(r => r.ErrorId).Where(id => id > 0).Distinct()],
             windowFrom,
             windowTo,
-            tables,
             cancellationToken).ConfigureAwait(false);
 
         // A status is "rentable" exactly while the provider's lock-and-select query still lists it
@@ -640,14 +684,23 @@ internal sealed class PgOutboxMessageTracker(
     /// text, so rows sharing an id also share their type and message — the first row wins and the day
     /// of each row does not have to be matched exactly.
     /// </summary>
+    /// <remarks>
+    /// The table is only asked about when there is at least one id to resolve, and an id greater than
+    /// zero can only have been written by the insert that creates <c>__error$</c> in the first place —
+    /// so the "does it exist" answer is true by the time it matters, and the catalog is consulted once
+    /// for the life of the process rather than on every trace read.
+    /// </remarks>
     private async Task<Dictionary<long, ErrorDetail>> ResolveErrorsAsync(
         long[] errorIds,
         DateTimeOffset windowFrom,
         DateTimeOffset windowTo,
-        PgOutboxStorageTables tables,
         CancellationToken cancellationToken)
     {
-        if (errorIds.Length == 0 || !tables.Error) return [];
+        if (errorIds.Length == 0) return [];
+        if (!await storage.ExistsAsync(PgOutboxStorageTable.Error, cancellationToken).ConfigureAwait(false))
+        {
+            return [];
+        }
 
         await using NpgsqlConnection connection = await dataSource
             .OpenDbConnectionAsync(cancellationToken)
@@ -659,9 +712,10 @@ internal sealed class PgOutboxMessageTracker(
         // One day of slack below the window: the error row is keyed by the day start of the delivery
         // timestamp, and a consumer reporting a non-UTC DateTimeOffset makes that instant differ from
         // the UTC midnight the reader computes. The upper bound is the window end (now, by default).
+        // The subtraction is clamped rather than thrown: the lower bound is a caller-supplied date.
         command.Parameters.Add(new NpgsqlParameter<long>(
             SqlParam.WindowFrom,
-            (windowFrom - TimeSpan.FromDays(1)).ToUnixTimeSeconds()));
+            TrackingWindow.Floor(windowFrom, TimeSpan.FromDays(1)).ToUnixTimeSeconds()));
         command.Parameters.Add(new NpgsqlParameter<long>(
             SqlParam.WindowTo,
             windowTo.ToUnixTimeSeconds()));

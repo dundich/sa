@@ -109,7 +109,19 @@ internal sealed class DeliveryBuilder(IServiceCollection services, string scopeK
     /// <c>[a-z0-9_]</c>.</exception>
     internal static string EnsureValidConsumerGroupId(string? consumerGroupId, string? source = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(consumerGroupId);
+        // The source is appended to both errors: a blank id returned by a naming strategy is exactly
+        // the case where `consumerGroupId` names something the caller never passed, and blaming it
+        // would hide the real origin (the check used to run before `source` was ever mentioned).
+        string suppliedBy = source is null ? string.Empty : $" The id was supplied by {source}.";
+
+        if (string.IsNullOrWhiteSpace(consumerGroupId))
+        {
+            throw new ArgumentException(
+                "Consumer group id must not be null, empty or whitespace. A group id is used " +
+                "verbatim as the consumer's DI key, the settings key, the job name and part of " +
+                "the PostgreSQL partition name." + suppliedBy,
+                nameof(consumerGroupId));
+        }
 
         foreach (char c in consumerGroupId)
         {
@@ -121,7 +133,7 @@ internal sealed class DeliveryBuilder(IServiceCollection services, string scopeK
                 "allowed. A group id is used verbatim as the consumer's DI key, the settings key, " +
                 "the job name and part of the PostgreSQL partition name, so it must contain only " +
                 "lowercase ASCII letters, digits and underscores (for example 'es_group')." +
-                (source is null ? string.Empty : $" The id was supplied by {source}."),
+                suppliedBy,
                 nameof(consumerGroupId));
         }
 

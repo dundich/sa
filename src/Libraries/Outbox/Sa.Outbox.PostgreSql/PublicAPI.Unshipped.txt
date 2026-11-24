@@ -1,1 +1,3 @@
 #nullable enable
+const Sa.Outbox.PostgreSql.Tracking.TrackingLimits.MaxRows = 5000 -> int
+Sa.Outbox.PostgreSql.Tracking.TrackingLimits

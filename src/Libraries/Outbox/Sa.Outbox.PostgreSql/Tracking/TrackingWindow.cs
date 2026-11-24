@@ -23,17 +23,51 @@ internal static class TrackingWindow
         DateTimeOffset? fromDate,
         DateTimeOffset? toDate)
     {
+        // `toDate` absent means "up to now"; `fromDate` absent means "a lookback from the end". Both
+        // bounds are resolved before anything is compared, so the error below can name the one the
+        // caller actually supplied instead of always blaming `toDate` (which may not have been
+        // passed at all — the common mistake is a `fromDate` in the future).
         DateTimeOffset end = toDate ?? timeProvider.GetUtcNow();
-        DateTimeOffset start = fromDate ?? end - DefaultLookback;
+        DateTimeOffset start = fromDate ?? Floor(end, DefaultLookback);
 
-        if (end <= start)
+        if (start >= end)
         {
-            throw new ArgumentOutOfRangeException(
-                nameof(toDate),
-                toDate,
-                "The end of the tracking window must be later than its start.");
+            throw toDate is null
+                ? new ArgumentOutOfRangeException(
+                    nameof(fromDate),
+                    fromDate,
+                    "The start of the tracking window must be earlier than its end, which defaults "
+                    + "to the current time when toDate is not supplied.")
+                : new ArgumentOutOfRangeException(
+                    nameof(toDate),
+                    toDate,
+                    "The end of the tracking window must be later than its start.");
         }
 
         return (start, end);
+    }
+
+    /// <summary>
+    /// <c>value - delta</c>, clamped at <see cref="DateTimeOffset.MinValue"/> instead of throwing.
+    /// </summary>
+    /// <remarks>
+    /// Both subtractions on this path (<c>end - lookback</c> and the error row's one-day slack) are
+    /// arithmetic on caller-supplied bounds: near <see cref="DateTimeOffset.MinValue"/> the plain
+    /// operator throws an <see cref="ArgumentOutOfRangeException"/> whose parameter is the operand,
+    /// which names nothing the caller passed.
+    /// <para>
+    /// The arithmetic runs on <see cref="DateTimeOffset.UtcTicks"/>, not on <see cref="DateTimeOffset.Ticks"/>:
+    /// the latter is the clock reading, and an offset is re-validated against the UTC range, so a value
+    /// a few hours into year 1 with a positive offset throws even when its clock part is in range.
+    /// The offset itself is preserved on the result.
+    /// </para>
+    /// </remarks>
+    public static DateTimeOffset Floor(DateTimeOffset value, TimeSpan delta)
+    {
+        long utc = value.UtcTicks - delta.Ticks;
+
+        if (utc < DateTimeOffset.MinValue.UtcTicks) return DateTimeOffset.MinValue;
+
+        return new DateTimeOffset(utc, TimeSpan.Zero).ToOffset(value.Offset);
     }
 }

@@ -816,7 +816,7 @@ public class PgOutboxMessageTrackerTests(PgOutboxMessageTrackerTests.Fixture fix
 
         DateTimeOffset now = DateTimeOffset.UtcNow;
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+        ArgumentOutOfRangeException inverted = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => Tracker.GetAsync(
                 "payload",
                 TenantId,
@@ -824,8 +824,33 @@ public class PgOutboxMessageTrackerTests(PgOutboxMessageTrackerTests.Fixture fix
                 toDate: now.AddDays(-1),
                 cancellationToken: Ct).AsTask());
 
-        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+        // `toDate` was supplied, so it is the one blamed.
+        Assert.Equal("toDate", inverted.ParamName);
+
+        // No `toDate`: the window ends at "now", so the mistake is the `fromDate` in the future —
+        // and the error must name it rather than a parameter the caller never passed.
+        ArgumentOutOfRangeException future = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => Tracker.GetAsync(
+                "payload",
+                TenantId,
+                fromDate: now.AddDays(1),
+                cancellationToken: Ct).AsTask());
+
+        Assert.Equal("fromDate", future.ParamName);
+
+        ArgumentOutOfRangeException negativeLimit = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => Tracker.GetHistoryAsync("payload", TenantId, limit: 0, cancellationToken: Ct).AsTask());
+
+        Assert.Equal("limit", negativeLimit.ParamName);
+
+        ArgumentOutOfRangeException oversizedLimit = await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => Tracker.GetHistoryAsync(
+                "payload",
+                TenantId,
+                limit: TrackingLimits.MaxRows + 1,
+                cancellationToken: Ct).AsTask());
+
+        Assert.Equal("limit", oversizedLimit.ParamName);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => Tracker.SearchAsync(

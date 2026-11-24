@@ -83,6 +83,39 @@ public class ConsumerGroupIdValidationTests
         Assert.Contains("IConsumerGroupNamingStrategy", error.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void DefaultNamingStrategy_WithBlankName_ThrowsNamingTheStrategy(string name)
+    {
+        // A blank id is the case where `consumerGroupId` names something the caller never passed:
+        // the error must still point at the strategy, not at the AddDelivery argument.
+        var services = new ServiceCollection();
+
+        ArgumentException error = Assert.Throws<ArgumentException>(() =>
+            services.AddSaOutbox(builder => builder.WithDeliveries(deliveries => deliveries
+                .ConfigureDefaultNamingStrategy(new FixedNamingStrategy(name))
+                .AddDelivery<TestConsumer, TestMessage>())));
+
+        Assert.Contains("IConsumerGroupNamingStrategy", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DefaultNamingStrategy_WithNullName_ThrowsNamingTheStrategy()
+    {
+        // Null is a contract violation by the strategy, not by the caller of AddDelivery: it is
+        // reported as ArgumentException rather than ArgumentNullException, so the blame stays on the
+        // strategy (an ArgumentNullException would name the AddDelivery argument instead).
+        var services = new ServiceCollection();
+
+        ArgumentException error = Assert.Throws<ArgumentException>(() =>
+            services.AddSaOutbox(builder => builder.WithDeliveries(deliveries => deliveries
+                .ConfigureDefaultNamingStrategy(new NullNamingStrategy())
+                .AddDelivery<TestConsumer, TestMessage>())));
+
+        Assert.Contains("IConsumerGroupNamingStrategy", error.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void DefaultNamingStrategy_WithCanonicalName_RegistersItVerbatim()
     {
@@ -115,5 +148,11 @@ public class ConsumerGroupIdValidationTests
     private sealed class FixedNamingStrategy(string name) : IConsumerGroupNamingStrategy
     {
         public string GetConsumerGroupName<TConsumer>() => name;
+    }
+
+    /// <summary>A strategy that violates the contract, which must still be attributed to it.</summary>
+    private sealed class NullNamingStrategy : IConsumerGroupNamingStrategy
+    {
+        public string GetConsumerGroupName<TConsumer>() => null!;
     }
 }
